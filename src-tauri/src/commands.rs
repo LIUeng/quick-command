@@ -1,6 +1,7 @@
 use crate::{models::*, parser, search, store::Store};
 use std::{collections::HashMap, fs, path::Path, process::Command, time::{SystemTime, UNIX_EPOCH}};
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use uuid::Uuid;
 
 fn now() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() }
@@ -120,11 +121,31 @@ fn rebuild(data: &mut AppData) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn save_settings(settings: Settings, store: State<'_, Store>) -> Result<LauncherState, String> {
+pub fn save_settings(settings: Settings, app: AppHandle, store: State<'_, Store>) -> Result<LauncherState, String> {
     let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
-    data.settings = settings;
-    rebuild(&mut data)?;
-    store.save(&data)?;
+    let previous_shortcut = data.settings.shortcut.clone();
+    let next_shortcut = settings.shortcut.clone();
+    let mut next_data = data.clone();
+    next_data.settings = settings;
+    rebuild(&mut next_data)?;
+
+    if previous_shortcut != next_shortcut {
+        app.global_shortcut().unregister(previous_shortcut.as_str())
+            .map_err(|error| format!("无法注销旧快捷键: {error}"))?;
+        if let Err(error) = app.global_shortcut().register(next_shortcut.as_str()) {
+            let _ = app.global_shortcut().register(previous_shortcut.as_str());
+            return Err(format!("快捷键无效或已被占用: {error}"));
+        }
+    }
+
+    if let Err(error) = store.save(&next_data) {
+        if previous_shortcut != next_shortcut {
+            let _ = app.global_shortcut().unregister(next_shortcut.as_str());
+            let _ = app.global_shortcut().register(previous_shortcut.as_str());
+        }
+        return Err(error);
+    }
+    *data = next_data;
     Ok(snapshot(&data))
 }
 

@@ -19,9 +19,17 @@ fn toggle_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
+fn show_window<R: Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().with_handler(|app, _shortcut, event| {
             if event.state == ShortcutState::Pressed { toggle_window(app); }
         }).build())
@@ -33,6 +41,11 @@ pub fn run() {
             app.manage(store);
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Focused(false)) {
+                let _ = window.hide();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_launcher_state,
             commands::search_projects,
@@ -41,6 +54,12 @@ pub fn run() {
             commands::save_settings,
             commands::reindex_workspaces,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Quick Command");
+        .build(tauri::generate_context!())
+        .expect("error while building Quick Command");
+
+    app.run(|app, event| {
+        if matches!(event, tauri::RunEvent::Reopen { .. }) {
+            show_window(app);
+        }
+    });
 }

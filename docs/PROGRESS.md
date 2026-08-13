@@ -29,9 +29,13 @@ Last updated: 2026-08-13
 
 - [x] Implement Spotlight-style launcher interface.
 - [x] Implement keyboard navigation and execution states.
+- [x] Hide the launcher on focus loss, successful execution, and Escape.
+- [x] Apply a transparent, rounded launcher window surface.
+- [x] Restore the hidden launcher from the macOS Dock and support window dragging.
+- [x] Constrain the settings overlay to the rounded launcher surface.
 - [~] Implement no-result directory creation confirmation — creation action exists; explicit path confirmation UI remains.
 - [x] Implement settings for shortcut and workspace roots.
-- [~] Register and update the global shortcut — startup registration exists; runtime re-registration after setting changes remains.
+- [x] Register and update the global shortcut with validation, rollback, and keycap-style display.
 
 ## Milestone 4 — Release readiness
 
@@ -48,3 +52,8 @@ Last updated: 2026-08-13
 - 2026-08-13: Frontend `pnpm check` and `pnpm build` pass.
 - 2026-08-13: Fixed the first manual Rust build findings: added the required Tauri icon source, removed an unused import, and corrected the `MutexGuard` snapshot borrow.
 - 2026-08-13: `cargo check` and all 5 Rust unit tests pass; the runnable foundation is verified for the first commit.
+- 2026-08-13: Completed launcher focus behavior, transparent rounded presentation, and runtime shortcut reassignment with symbolic keycaps.
+- 2026-08-13: Disabled the macOS native shadow for the transparent window and constrained the launcher surface to eliminate irregular translucent window-edge artifacts.
+- 2026-08-13: Added Dock reopen handling, draggable launcher regions, layered CSS elevation, and rounded settings overlay clipping.
+- 2026-08-13: Added the explicit Tauri window-drag permission and API-driven dragging; reduced shadows to stay within the transparent window padding and avoid rectangular clipping.
+- 2026-08-13: Added a repository-wide Git commit convention requiring Conventional Commit subjects plus functional summaries and verification details for agent memory continuity.

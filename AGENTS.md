@@ -35,10 +35,53 @@ Quick Command is a macOS-first desktop launcher for opening local projects with 
 4. Run `pnpm check` and `cargo test --manifest-path src-tauri/Cargo.toml` before marking a milestone done.
 5. Do not silently expand the MVP into arbitrary shell execution.
 
+## Git commit message convention
+
+Use Conventional Commits for the subject line:
+
+```text
+<type>(<optional-scope>): <concise change summary>
+```
+
+Allowed types:
+
+- `feat`: user-facing functionality
+- `fix`: bug fix
+- `refactor`: internal change without intended behavior change
+- `docs`: documentation only
+- `test`: tests only
+- `build`: dependencies, packaging, or build configuration
+- `chore`: repository maintenance
+
+Keep the subject imperative, specific, and under 72 characters. Do not use vague subjects such as `update code`, `fix issues`, or `changes`.
+
+Every functional commit must include a body that acts as a memory aid for future agents. Use this format:
+
+```text
+feat(shortcut): support runtime shortcut reassignment
+
+Summary:
+- Capture shortcuts as key combinations and display symbolic keycaps.
+- Unregister the previous shortcut before registering the new value.
+- Restore the previous shortcut when registration or persistence fails.
+
+Verification:
+- pnpm check
+- cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+Commit body requirements:
+
+- `Summary` lists the important user-visible behavior and architectural decisions.
+- Mention notable limitations, follow-up work, or compatibility concerns when applicable.
+- `Verification` lists the exact checks that passed; write `Not run` with a reason if validation was skipped.
+- Keep one logical change per commit whenever practical.
+- Update `docs/PROGRESS.md` in the same commit when milestone status or implementation decisions change.
+- Before committing, inspect `git diff --cached` and confirm generated files, caches, secrets, and local state are not staged.
+
 ## Status notation
 
 - `[ ]` TODO
 - `[~]` IN PROGRESS
 - `[x]` DONE
 - `[!]` BLOCKED, with a short reason
-

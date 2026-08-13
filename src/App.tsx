@@ -1,5 +1,6 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Clock3, Command, Folder, LoaderCircle, Plus, RefreshCw, Search, Settings2 } from "lucide-react";
+import { FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Clock3, Command, Folder, Keyboard, LoaderCircle, Plus, RefreshCw, Search, Settings2 } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { createAndExecute, execute, loadState, reindex, saveSettings, search } from "./lib/api";
 import type { LauncherState, QueryResponse, SearchResult, Settings } from "./lib/types";
 
@@ -13,6 +14,42 @@ const emptyQuery: QueryResponse = {
 
 function describeError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isTauri() {
+  return "__TAURI_INTERNALS__" in window;
+}
+
+async function hideLauncher() {
+  if (isTauri()) await getCurrentWindow().hide();
+}
+
+async function startWindowDrag(event: ReactMouseEvent<HTMLElement>) {
+  if (event.button !== 0 || !isTauri()) return;
+  const target = event.target as HTMLElement;
+  if (target.closest("input, button, textarea, [data-no-drag]")) return;
+  event.preventDefault();
+  await getCurrentWindow().startDragging();
+}
+
+const keyLabels: Record<string, string> = {
+  CommandOrControl: "⌘",
+  Command: "⌘",
+  Control: "⌃",
+  Alt: "⌥",
+  Option: "⌥",
+  Shift: "⇧",
+  Space: "Space",
+  Enter: "↩",
+  Escape: "Esc",
+};
+
+function shortcutParts(shortcut: string) {
+  return shortcut.split("+").filter(Boolean).map((part) => keyLabels[part] ?? (part.length === 1 ? part.toUpperCase() : part));
+}
+
+function ShortcutKeys({ shortcut }: { shortcut: string }) {
+  return <span className="inline-flex items-center gap-1" aria-label={shortcut}>{shortcutParts(shortcut).map((part, index) => <kbd className="keycap" key={`${part}-${index}`}>{part}</kbd>)}</span>;
 }
 
 function App() {
@@ -55,6 +92,7 @@ function App() {
       await execute(query, target?.path);
       setQuery("");
       setState(await loadState());
+      await hideLauncher();
     } catch (reason) {
       setError(describeError(reason));
     } finally {
@@ -70,6 +108,7 @@ function App() {
       await createAndExecute(query);
       setQuery("");
       setState(await loadState());
+      await hideLauncher();
     } catch (reason) {
       setError(describeError(reason));
     } finally {
@@ -90,8 +129,8 @@ function App() {
       else if (response.canCreate) void createProject();
       else void run();
     } else if (event.key === "Escape") {
-      setQuery("");
-      setError(null);
+      if (settingsOpen) setSettingsOpen(false);
+      else void hideLauncher();
     }
   }
 
@@ -100,16 +139,17 @@ function App() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 p-3 text-zinc-100">
-      <section className="mx-auto max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl shadow-black/50">
-        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
+    <main className="flex h-screen w-screen bg-transparent p-3 text-zinc-100">
+      <section className="launcher-surface relative flex min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900">
+        <div onMouseDown={startWindowDrag} className="absolute inset-x-0 top-0 z-10 h-3 cursor-grab active:cursor-grabbing" aria-hidden="true" />
+        <div onMouseDown={startWindowDrag} className="flex cursor-grab items-center gap-3 border-b border-white/10 px-5 py-4 active:cursor-grabbing">
           <Search className="h-5 w-5 text-zinc-500" />
           <input
             ref={inputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onKeyDown}
-            className="min-w-0 flex-1 bg-transparent text-lg outline-none placeholder:text-zinc-600"
+            className="min-w-0 flex-1 cursor-text bg-transparent text-lg outline-none placeholder:text-zinc-600"
             placeholder="输入命令，例如 code example"
             spellCheck={false}
           />
@@ -119,7 +159,7 @@ function App() {
           </button>
         </div>
 
-        <div className="max-h-[480px] overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {error && <div className="m-2 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</div>}
 
           {query.trim() !== "" && choices.map((item, index) => (
@@ -157,8 +197,8 @@ function App() {
         </div>
 
         <footer className="flex items-center justify-between border-t border-white/10 px-5 py-3 text-xs text-zinc-600">
-          <span className="flex items-center gap-2"><Command className="h-3.5 w-3.5" /> Enter 执行 · ↑↓ 选择 · Esc 清空</span>
-          <span>{state.settings.shortcut}</span>
+          <span className="flex items-center gap-2"><Command className="h-3.5 w-3.5" /> Enter 执行 · ↑↓ 选择 · Esc 隐藏</span>
+          <ShortcutKeys shortcut={state.settings.shortcut} />
         </footer>
       </section>
 
@@ -175,16 +215,20 @@ function SettingsDialog({ state, onClose, onChange }: { state: LauncherState; on
   const [form, setForm] = useState<Settings>(state.settings);
   const [workspaceText, setWorkspaceText] = useState(state.settings.workspaces.map((item) => item.path).join("\n"));
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const workspaceCount = useMemo(() => workspaceText.split("\n").filter((line) => line.trim()).length, [workspaceText]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
+    setError(null);
     try {
       const workspaces = workspaceText.split("\n").map((path) => path.trim()).filter(Boolean).map((path) => ({ path, enabled: true }));
       const next = await saveSettings({ ...form, defaultWorkspace: workspaces[0]?.path ?? null, workspaces });
       onChange(next);
       onClose();
+    } catch (reason) {
+      setError(describeError(reason));
     } finally {
       setBusy(false);
     }
@@ -192,15 +236,41 @@ function SettingsDialog({ state, onClose, onChange }: { state: LauncherState; on
 
   async function rebuild() {
     setBusy(true);
-    try { onChange(await reindex()); } finally { setBusy(false); }
+    setError(null);
+    try { onChange(await reindex()); } catch (reason) { setError(describeError(reason)); } finally { setBusy(false); }
+  }
+
+  function captureShortcut(event: KeyboardEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (["Meta", "Control", "Alt", "Shift"].includes(event.key)) return;
+    const parts: string[] = [];
+    if (event.metaKey || event.ctrlKey) parts.push("CommandOrControl");
+    if (event.altKey) parts.push("Alt");
+    if (event.shiftKey) parts.push("Shift");
+    const key = event.key === " " ? "Space" : event.key.length === 1 ? event.key.toUpperCase() : event.key;
+    if (!parts.length) {
+      setError("快捷键至少需要包含 ⌘、⌃、⌥ 中的一个修饰键");
+      return;
+    }
+    parts.push(key);
+    setError(null);
+    setForm({ ...form, shortcut: parts.join("+") });
   }
 
   return (
-    <div className="fixed inset-0 grid place-items-center bg-black/70 p-6 backdrop-blur-sm" onMouseDown={onClose}>
-      <form className="w-full max-w-xl rounded-2xl border border-white/10 bg-zinc-900 p-6 shadow-2xl" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+    <div className="fixed inset-3 z-20 grid place-items-center overflow-hidden rounded-2xl bg-black/70 p-6 backdrop-blur-sm" onMouseDown={onClose}>
+      <form className="settings-surface w-full max-w-xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 p-6" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
         <h2 className="text-lg font-semibold">设置</h2>
-        <label className="field-label">全局快捷键<input className="field-input" value={form.shortcut} onChange={(event) => setForm({ ...form, shortcut: event.target.value })} /></label>
+        <label className="field-label">全局快捷键
+          <button type="button" className="shortcut-recorder" onKeyDown={captureShortcut}>
+            <Keyboard className="h-4 w-4 text-zinc-500" />
+            <ShortcutKeys shortcut={form.shortcut} />
+            <span className="ml-auto text-xs text-zinc-600">点击后按下新组合键</span>
+          </button>
+        </label>
         <label className="field-label">工作区目录（每行一个）<textarea className="field-input min-h-32 resize-y" value={workspaceText} onChange={(event) => setWorkspaceText(event.target.value)} placeholder="/Users/you/Projects" /></label>
+        {error && <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</div>}
         <div className="mt-5 flex items-center justify-between">
           <button type="button" className="secondary-button" onClick={() => void rebuild()} disabled={busy}><RefreshCw className="h-4 w-4" />重建索引</button>
           <div className="flex items-center gap-2"><span className="mr-2 text-xs text-zinc-600">{workspaceCount} 个工作区</span><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" disabled={busy}>保存</button></div>

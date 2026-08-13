@@ -3,5 +3,9 @@
   "identifier": "default",
   "description": "Default capability for the launcher window",
   "windows": ["main"],
-  "permissions": ["core:default", "global-shortcut:default"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "global-shortcut:default"
+  ]
 }
