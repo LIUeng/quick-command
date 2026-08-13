@@ -1,0 +1,24 @@
+# Dependencies and package-manager cache
+node_modules/
+.pnpm-store/
+
+# Frontend build output and TypeScript cache
+dist/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Rust and generated Tauri schemas
+src-tauri/target/
+src-tauri/gen/
+
+# Local environment and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# Editors and macOS
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,50 @@
+# Development Progress
+
+Last updated: 2026-08-13
+
+## Milestone 0 — Definition
+
+- [x] Extract MVP scope from the original README.
+- [x] Define security boundaries and acceptance scenarios.
+- [x] Add repository instructions for future agents.
+- [x] Define architecture and development workflow.
+
+## Milestone 1 — Runnable foundation
+
+- [x] Scaffold Tauri 2, React, TypeScript, Vite, and Tailwind CSS.
+- [x] Add launcher window configuration and application metadata.
+- [x] Add typed frontend-to-Rust command boundary.
+- [x] Verify frontend typecheck and production build.
+- [x] Verify Rust tests and Tauri compilation.
+
+## Milestone 2 — Core launcher
+
+- [x] Implement command parsing without shell evaluation.
+- [x] Implement configured workspace indexing.
+- [x] Implement deterministic fuzzy/frecency ranking.
+- [x] Implement safe process execution.
+- [x] Persist settings, index metadata, and recent successful history.
+
+## Milestone 3 — User experience
+
+- [x] Implement Spotlight-style launcher interface.
+- [x] Implement keyboard navigation and execution states.
+- [~] Implement no-result directory creation confirmation — creation action exists; explicit path confirmation UI remains.
+- [x] Implement settings for shortcut and workspace roots.
+- [~] Register and update the global shortcut — startup registration exists; runtime re-registration after setting changes remains.
+
+## Milestone 4 — Release readiness
+
+- [ ] Add integration coverage for main command flows.
+- [ ] Validate macOS GUI `PATH` behavior.
+- [ ] Validate packaged app permissions and signing configuration.
+- [ ] Document local development, packaging, and troubleshooting.
+
+## Decision log
+
+- 2026-08-13: Limit MVP to structured executable + arguments; arbitrary shell syntax is out of scope.
+- 2026-08-13: Target macOS first.
+- 2026-08-13: Use versioned JSON persistence for the first executable slice; migrate to SQLite when query/migration needs justify it.
+- 2026-08-13: Frontend `pnpm check` and `pnpm build` pass.
+- 2026-08-13: Fixed the first manual Rust build findings: added the required Tauri icon source, removed an unused import, and corrected the `MutexGuard` snapshot borrow.
+- 2026-08-13: `cargo check` and all 5 Rust unit tests pass; the runnable foundation is verified for the first commit.
