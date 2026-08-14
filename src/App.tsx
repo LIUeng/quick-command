@@ -21,7 +21,12 @@ function isTauri() {
 }
 
 async function hideLauncher() {
-  if (isTauri()) await getCurrentWindow().hide();
+  if (!isTauri()) return;
+  try {
+    await getCurrentWindow().hide();
+  } catch (reason) {
+    if (import.meta.env.DEV) console.error("Failed to hide launcher window", reason);
+  }
 }
 
 async function startWindowDrag(event: ReactMouseEvent<HTMLElement>) {

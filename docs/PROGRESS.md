@@ -61,3 +61,4 @@ Last updated: 2026-08-14
 - 2026-08-14: Added a centralized Rust error-presentation boundary: debug builds retain technical detail, while release builds expose only stable, actionable client messages.
 - 2026-08-14: Fixed shortcut capture to preserve macOS Command and Control as distinct modifiers instead of collapsing both into `CommandOrControl`.
 - 2026-08-14: Normalized shortcut keys from physical `KeyboardEvent.code` values so macOS Option combinations such as `Alt+1` save as `Alt+1` instead of localized characters such as `¡`.
+- 2026-08-14: Added the explicit Tauri window-hide capability and isolated best-effort UI hiding from command execution errors, preventing a successful command such as `ls -a` from flashing a `window.hide` failure.
