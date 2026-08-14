@@ -48,10 +48,16 @@ History is pruned to a reasonable internal cap while the UI returns the latest 3
 
 Input is parsed without a shell. The executable is resolved from the application environment and launched with `std::process::Command::args`. Shell control operators are rejected. For a directory-aware rule, only the designated argument is replaced by the selected absolute path.
 
+## Error presentation contract
+
+- Rust owns the boundary between internal failures and user-facing messages.
+- Debug builds may append the underlying system or library error for local diagnosis.
+- Release builds return only stable, actionable user messages and must not expose error types, raw OS error codes, or library diagnostics in the client UI.
+- User-facing messages should explain the recovery action without leaking environment variables or sensitive arguments.
+
 ## Indexing contract
 
 - Scan only configured workspace roots.
 - Skip hidden directories and common heavy directories such as `node_modules`, `target`, and `.git`.
 - Use a bounded recursion depth.
 - Return useful errors without discarding the last valid index.
-

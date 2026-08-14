@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Clock3, Command, Folder, Keyboard, LoaderCircle, Plus, RefreshCw, Search, Settings2 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { createAndExecute, execute, loadState, reindex, saveSettings, search } from "./lib/api";
@@ -42,7 +42,39 @@ const keyLabels: Record<string, string> = {
   Space: "Space",
   Enter: "↩",
   Escape: "Esc",
+  ArrowUp: "↑",
+  ArrowDown: "↓",
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  Backspace: "⌫",
+  Delete: "⌦",
+  Tab: "⇥",
+  Minus: "-",
+  Equal: "=",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Backslash: "\\",
+  Semicolon: ";",
+  Quote: "'",
+  Comma: ",",
+  Period: ".",
+  Slash: "/",
+  Backquote: "`",
 };
+
+function acceleratorKeyFromCode(code: string): string | null {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
+
+  const supportedCodes = new Set([
+    "Space", "Enter", "Escape", "Tab", "Backspace", "Delete", "Insert",
+    "Home", "End", "PageUp", "PageDown", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+    "Minus", "Equal", "BracketLeft", "BracketRight", "Backslash", "Semicolon",
+    "Quote", "Comma", "Period", "Slash", "Backquote",
+  ]);
+  return supportedCodes.has(code) ? code : null;
+}
 
 function shortcutParts(shortcut: string) {
   return shortcut.split("+").filter(Boolean).map((part) => keyLabels[part] ?? (part.length === 1 ? part.toUpperCase() : part));
@@ -116,7 +148,7 @@ function App() {
     }
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  function onKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown" && selectionCount) {
       event.preventDefault();
       setSelected((value) => (value + 1) % selectionCount);
@@ -216,7 +248,41 @@ function SettingsDialog({ state, onClose, onChange }: { state: LauncherState; on
   const [workspaceText, setWorkspaceText] = useState(state.settings.workspaces.map((item) => item.path).join("\n"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recordingShortcut, setRecordingShortcut] = useState(false);
   const workspaceCount = useMemo(() => workspaceText.split("\n").filter((line) => line.trim()).length, [workspaceText]);
+
+  useEffect(() => {
+    if (!recordingShortcut) return;
+
+    function captureShortcut(event: globalThis.KeyboardEvent) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.repeat || ["Meta", "Control", "Alt", "Shift"].includes(event.key)) return;
+
+      const parts: string[] = [];
+      if (event.metaKey) parts.push("Command");
+      if (event.ctrlKey) parts.push("Control");
+      if (event.altKey) parts.push("Alt");
+      if (event.shiftKey) parts.push("Shift");
+      if (!parts.length) {
+        setError("快捷键至少需要包含 ⌘、⌃、⌥ 中的一个修饰键");
+        return;
+      }
+
+      const key = acceleratorKeyFromCode(event.code);
+      if (!key) {
+        setError("暂不支持这个按键，请使用字母、数字、方向键或功能键");
+        return;
+      }
+      parts.push(key);
+      setForm((current) => ({ ...current, shortcut: parts.join("+") }));
+      setError(null);
+      setRecordingShortcut(false);
+    }
+
+    window.addEventListener("keydown", captureShortcut, true);
+    return () => window.removeEventListener("keydown", captureShortcut, true);
+  }, [recordingShortcut]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -240,33 +306,15 @@ function SettingsDialog({ state, onClose, onChange }: { state: LauncherState; on
     try { onChange(await reindex()); } catch (reason) { setError(describeError(reason)); } finally { setBusy(false); }
   }
 
-  function captureShortcut(event: KeyboardEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (["Meta", "Control", "Alt", "Shift"].includes(event.key)) return;
-    const parts: string[] = [];
-    if (event.metaKey || event.ctrlKey) parts.push("CommandOrControl");
-    if (event.altKey) parts.push("Alt");
-    if (event.shiftKey) parts.push("Shift");
-    const key = event.key === " " ? "Space" : event.key.length === 1 ? event.key.toUpperCase() : event.key;
-    if (!parts.length) {
-      setError("快捷键至少需要包含 ⌘、⌃、⌥ 中的一个修饰键");
-      return;
-    }
-    parts.push(key);
-    setError(null);
-    setForm({ ...form, shortcut: parts.join("+") });
-  }
-
   return (
     <div className="fixed inset-3 z-20 grid place-items-center overflow-hidden rounded-2xl bg-black/70 p-6 backdrop-blur-sm" onMouseDown={onClose}>
       <form className="settings-surface w-full max-w-xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 p-6" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
         <h2 className="text-lg font-semibold">设置</h2>
         <label className="field-label">全局快捷键
-          <button type="button" className="shortcut-recorder" onKeyDown={captureShortcut}>
+          <button type="button" className={`shortcut-recorder ${recordingShortcut ? "shortcut-recorder-active" : ""}`} onClick={() => { setError(null); setRecordingShortcut(true); }}>
             <Keyboard className="h-4 w-4 text-zinc-500" />
             <ShortcutKeys shortcut={form.shortcut} />
-            <span className="ml-auto text-xs text-zinc-600">点击后按下新组合键</span>
+            <span className={`ml-auto text-xs ${recordingShortcut ? "text-indigo-300" : "text-zinc-600"}`}>{recordingShortcut ? "请按下组合键…" : "点击开始录制"}</span>
           </button>
         </label>
         <label className="field-label">工作区目录（每行一个）<textarea className="field-input min-h-32 resize-y" value={workspaceText} onChange={(event) => setWorkspaceText(event.target.value)} placeholder="/Users/you/Projects" /></label>

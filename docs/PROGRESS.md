@@ -1,6 +1,6 @@
 # Development Progress
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 ## Milestone 0 — Definition
 
@@ -57,3 +57,7 @@ Last updated: 2026-08-13
 - 2026-08-13: Added Dock reopen handling, draggable launcher regions, layered CSS elevation, and rounded settings overlay clipping.
 - 2026-08-13: Added the explicit Tauri window-drag permission and API-driven dragging; reduced shadows to stay within the transparent window padding and avoid rectangular clipping.
 - 2026-08-13: Added a repository-wide Git commit convention requiring Conventional Commit subjects plus functional summaries and verification details for agent memory continuity.
+- 2026-08-13: Fixed shortcut recording by entering an explicit capture mode and listening at the settings-window level; the captured keycaps update the form immediately and are registered when the user clicks Save.
+- 2026-08-14: Added a centralized Rust error-presentation boundary: debug builds retain technical detail, while release builds expose only stable, actionable client messages.
+- 2026-08-14: Fixed shortcut capture to preserve macOS Command and Control as distinct modifiers instead of collapsing both into `CommandOrControl`.
+- 2026-08-14: Normalized shortcut keys from physical `KeyboardEvent.code` values so macOS Option combinations such as `Alt+1` save as `Alt+1` instead of localized characters such as `¡`.

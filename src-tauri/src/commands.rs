@@ -1,4 +1,4 @@
-use crate::{models::*, parser, search, store::Store};
+use crate::{errors::user_error, models::*, parser, search, store::Store};
 use std::{collections::HashMap, fs, path::Path, process::Command, time::{SystemTime, UNIX_EPOCH}};
 use tauri::{AppHandle, State};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -43,7 +43,9 @@ fn launch(parsed: &ParsedCommand, target_path: Option<&str>) -> Result<Vec<Strin
         if index >= args.len() { return Err("目录参数位置无效".into()); }
         args[index] = target.to_string();
     }
-    Command::new(&parsed.executable).args(&args).spawn().map_err(|error| format!("无法启动 {}: {error}。请确认该命令在应用 PATH 中可用", parsed.executable))?;
+    Command::new(&parsed.executable).args(&args).spawn().map_err(|error| {
+        user_error(error, &format!("无法启动 {}，请确认该命令在应用 PATH 中可用", parsed.executable))
+    })?;
     Ok(args)
 }
 
@@ -79,7 +81,7 @@ pub fn create_and_execute(query: String, store: State<'_, Store>) -> Result<(), 
     let root = data.settings.default_workspace.as_ref().ok_or("请先设置默认工作区")?;
     let root_path = Path::new(root).canonicalize().map_err(|_| "默认工作区不存在")?;
     let target = root_path.join(name);
-    fs::create_dir(&target).map_err(|error| format!("创建目录失败: {error}"))?;
+    fs::create_dir(&target).map_err(|error| user_error(error, "创建目录失败，请检查目录名称和工作区权限"))?;
     let target_text = target.to_string_lossy().into_owned();
     data.directories.push(DirectoryRecord { path: target_text.clone(), name: name.clone(), use_count: 0, last_used_at: None });
     let args = match launch(&parsed, Some(&target_text)) {
@@ -120,6 +122,22 @@ fn rebuild(data: &mut AppData) -> Result<(), String> {
     Ok(())
 }
 
+fn replace_shortcut(app: &AppHandle, previous: &str, next: &str) -> Result<(), String> {
+    if previous == next { return Ok(()); }
+    app.global_shortcut().unregister(previous)
+        .map_err(|error| user_error(error, "无法更新快捷键，请重启应用后重试"))?;
+    if let Err(error) = app.global_shortcut().register(next) {
+        let _ = app.global_shortcut().register(previous);
+        return Err(user_error(error, "快捷键无效或已被其他应用占用"));
+    }
+    Ok(())
+}
+
+fn restore_shortcut(app: &AppHandle, current: &str, previous: &str) {
+    let _ = app.global_shortcut().unregister(current);
+    let _ = app.global_shortcut().register(previous);
+}
+
 #[tauri::command]
 pub fn save_settings(settings: Settings, app: AppHandle, store: State<'_, Store>) -> Result<LauncherState, String> {
     let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
@@ -129,19 +147,11 @@ pub fn save_settings(settings: Settings, app: AppHandle, store: State<'_, Store>
     next_data.settings = settings;
     rebuild(&mut next_data)?;
 
-    if previous_shortcut != next_shortcut {
-        app.global_shortcut().unregister(previous_shortcut.as_str())
-            .map_err(|error| format!("无法注销旧快捷键: {error}"))?;
-        if let Err(error) = app.global_shortcut().register(next_shortcut.as_str()) {
-            let _ = app.global_shortcut().register(previous_shortcut.as_str());
-            return Err(format!("快捷键无效或已被占用: {error}"));
-        }
-    }
+    replace_shortcut(&app, &previous_shortcut, &next_shortcut)?;
 
     if let Err(error) = store.save(&next_data) {
         if previous_shortcut != next_shortcut {
-            let _ = app.global_shortcut().unregister(next_shortcut.as_str());
-            let _ = app.global_shortcut().register(previous_shortcut.as_str());
+            restore_shortcut(&app, &next_shortcut, &previous_shortcut);
         }
         return Err(error);
     }
