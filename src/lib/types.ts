@@ -100,7 +100,7 @@ export type TextFilePresentation = {
 
 export type PresentationOutput = DirectoryPresentation | TextFilePresentation;
 
-export type OperationKind = "create-directory";
+export type OperationKind = "create-directory" | "create-project-directory-and-open";
 
 export type OperationConfirmation = {
   kind: OperationKind;
@@ -108,6 +108,7 @@ export type OperationConfirmation = {
   description: string;
   targetPath: string;
   workspacePath: string;
+  pathsToCreate: string[];
 };
 
 export type CommandExecution =

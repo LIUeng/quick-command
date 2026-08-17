@@ -119,6 +119,7 @@ pub enum CommandActionKind {
 #[serde(rename_all = "kebab-case")]
 pub enum OperationKind {
     CreateDirectory,
+    CreateProjectDirectoryAndOpen,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -129,6 +130,7 @@ pub struct OperationConfirmation {
     pub description: String,
     pub target_path: String,
     pub workspace_path: String,
+    pub paths_to_create: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

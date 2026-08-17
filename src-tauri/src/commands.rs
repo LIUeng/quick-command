@@ -9,7 +9,7 @@ use crate::{
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    path::Path,
+    path::{Component, Path, PathBuf},
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -93,26 +93,29 @@ pub fn search_projects(query: String, store: State<'_, Store>) -> Result<QueryRe
 
 fn candidate_actions(parsed: &ParsedCommand, target: Option<&str>) -> Vec<CommandAction> {
     let Some(target) = target else { return vec![] };
-    if parsed.executable != "code" || !is_safe_child_name(target) {
+    if parsed.executable != "code" || safe_relative_project_path(target).is_none() {
         return vec![];
     }
 
-    vec![
-        CommandAction {
+    let directory_intent = target.ends_with('/');
+    let mut actions = Vec::with_capacity(if directory_intent { 1 } else { 2 });
+    if !directory_intent {
+        actions.push(CommandAction {
             id: "open-file".into(),
             kind: CommandActionKind::OpenFile,
             label: "作为文件打开".into(),
             description: format!("选择工作区后使用 VS Code 打开 {target}"),
             requires_workspace: true,
-        },
-        CommandAction {
-            id: "create-directory".into(),
-            kind: CommandActionKind::CreateDirectory,
-            label: "创建项目目录并打开".into(),
-            description: format!("选择工作区后创建目录 {target}"),
-            requires_workspace: true,
-        },
-    ]
+        });
+    }
+    actions.push(CommandAction {
+        id: "create-directory".into(),
+        kind: CommandActionKind::CreateDirectory,
+        label: "创建项目目录并打开".into(),
+        description: format!("选择工作区后创建目录 {target}"),
+        requires_workspace: true,
+    });
+    actions
 }
 
 fn is_safe_child_name(name: &str) -> bool {
@@ -122,6 +125,29 @@ fn is_safe_child_name(name: &str) -> bool {
         && !name.starts_with('-')
         && !name.ends_with('/')
         && Path::new(name).components().count() == 1
+}
+
+fn safe_relative_project_path(value: &str) -> Option<PathBuf> {
+    if value.is_empty() || value.starts_with('-') || Path::new(value).is_absolute() {
+        return None;
+    }
+    let without_trailing_separator = value.strip_suffix('/').unwrap_or(value);
+    if without_trailing_separator.is_empty()
+        || without_trailing_separator
+            .split('/')
+            .any(|component| component.is_empty() || component == "." || component == "..")
+    {
+        return None;
+    }
+    let path = Path::new(value);
+    if path
+        .components()
+        .all(|component| matches!(component, Component::Normal(_)))
+    {
+        Some(path.to_path_buf())
+    } else {
+        None
+    }
 }
 
 fn validate_target(target: &Path, settings: &Settings) -> Result<(), String> {
@@ -409,6 +435,7 @@ pub fn execute_command(
                 description: "确认后将在所选工作区内创建这个目录。".into(),
                 target_path: plan.target.to_string_lossy().into_owned(),
                 workspace_path: plan.workspace.to_string_lossy().into_owned(),
+                paths_to_create: vec![plan.target.to_string_lossy().into_owned()],
             },
         });
     }
@@ -442,24 +469,43 @@ pub fn confirm_operation(
     query: String,
     operation_kind: OperationKind,
     target_path: String,
+    workspace_path: String,
     store: State<'_, Store>,
 ) -> Result<CommandExecution, String> {
     let parsed = parser::parse(&query)?;
-    if parsed.executable != "mkdir" || operation_kind != OperationKind::CreateDirectory {
-        return Err("当前确认信息与命令不匹配，请重新执行命令".into());
-    }
-    let requested = match parsed.args.as_slice() {
-        [path] => path.as_str(),
-        _ => return Err("mkdir 当前一次只能创建一个目录".into()),
-    };
     let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
-    let plan = resolve_mkdir_plan(requested, &data)?
-        .ok_or("活动上下文已变化，请重新选择工作区并执行命令")?;
-    if plan.target != Path::new(&target_path) {
-        return Err("目录目标已变化，请重新确认后再创建".into());
+    match operation_kind {
+        OperationKind::CreateDirectory => {
+            if parsed.executable != "mkdir" {
+                return Err("当前确认信息与命令不匹配，请重新执行命令".into());
+            }
+            let requested = match parsed.args.as_slice() {
+                [path] => path.as_str(),
+                _ => return Err("mkdir 当前一次只能创建一个目录".into()),
+            };
+            let plan = resolve_mkdir_plan(requested, &data)?
+                .ok_or("活动上下文已变化，请重新选择工作区并执行命令")?;
+            if plan.target != Path::new(&target_path)
+                || plan.workspace != selected_workspace(&workspace_path, &data.settings)?
+            {
+                return Err("目录目标或工作区已变化，请重新确认后再创建".into());
+            }
+            apply_mkdir_plan(plan, &query, &parsed, &store, &mut data)
+        }
+        OperationKind::CreateProjectDirectoryAndOpen => {
+            if parsed.executable != "code" {
+                return Err("当前确认信息与命令不匹配，请重新执行命令".into());
+            }
+            let index = parsed.directory_arg_index.ok_or("当前命令没有路径参数")?;
+            let requested = parsed.args.get(index).ok_or("缺少项目路径")?;
+            let root = selected_workspace(&workspace_path, &data.settings)?;
+            let plan = resolve_project_creation_plan(&root, requested)?;
+            if plan.target != Path::new(&target_path) {
+                return Err("项目目标已变化，请重新确认后再创建".into());
+            }
+            apply_project_creation_plan(plan, &query, &parsed, &store, &mut data)
+        }
     }
-
-    apply_mkdir_plan(plan, &query, &parsed, &store, &mut data)
 }
 
 fn selected_workspace(path: &str, settings: &Settings) -> Result<std::path::PathBuf, String> {
@@ -482,26 +528,231 @@ fn selected_workspace(path: &str, settings: &Settings) -> Result<std::path::Path
     }
 }
 
+#[derive(Debug)]
+struct ProjectCreationPlan {
+    root: PathBuf,
+    target: PathBuf,
+    missing_directories: Vec<PathBuf>,
+}
+
+fn resolve_workspace_relative_target(
+    workspace_root: &Path,
+    relative: &Path,
+) -> Result<PathBuf, String> {
+    let root = workspace_root
+        .canonicalize()
+        .map_err(|error| user_error(error, "所选工作区不存在或无法访问"))?;
+    let components: Vec<_> = relative.components().collect();
+    let mut current = root.clone();
+    for (index, component) in components.iter().enumerate() {
+        let Component::Normal(name) = component else {
+            return Err("项目路径无效，请使用不含 . 或 .. 的相对路径".into());
+        };
+        let candidate = current.join(name);
+        match fs::symlink_metadata(&candidate) {
+            Ok(_) => {
+                let canonical = candidate
+                    .canonicalize()
+                    .map_err(|error| user_error(error, "项目路径无法访问"))?;
+                if !canonical.starts_with(&root) {
+                    return Err("项目路径不能通过符号链接离开所选工作区".into());
+                }
+                if index + 1 < components.len() && !canonical.is_dir() {
+                    return Err("项目路径中的已有部分不是文件夹".into());
+                }
+                current = canonical;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                current = candidate;
+                for remaining in &components[index + 1..] {
+                    let Component::Normal(name) = remaining else {
+                        return Err("项目路径无效，请使用不含 . 或 .. 的相对路径".into());
+                    };
+                    current.push(name);
+                }
+                break;
+            }
+            Err(error) => return Err(user_error(error, "无法检查项目路径，请确认工作区权限")),
+        }
+    }
+    Ok(current)
+}
+
+fn resolve_project_creation_plan(
+    workspace_root: &Path,
+    requested: &str,
+) -> Result<ProjectCreationPlan, String> {
+    let relative = safe_relative_project_path(requested)
+        .ok_or("项目路径无效，请使用不含 . 或 .. 的相对路径")?;
+    let root = workspace_root
+        .canonicalize()
+        .map_err(|error| user_error(error, "所选工作区不存在或无法访问"))?;
+    if !root.is_dir() {
+        return Err("所选工作区必须是文件夹".into());
+    }
+
+    let mut current = root.clone();
+    let mut missing_directories = Vec::new();
+    let mut encountered_missing = false;
+    for component in relative.components() {
+        let Component::Normal(name) = component else {
+            return Err("项目路径无效，请使用不含 . 或 .. 的相对路径".into());
+        };
+        let candidate = current.join(name);
+        if encountered_missing {
+            current = candidate;
+            missing_directories.push(current.clone());
+            continue;
+        }
+        match fs::symlink_metadata(&candidate) {
+            Ok(_) => {
+                let canonical = candidate
+                    .canonicalize()
+                    .map_err(|error| user_error(error, "项目路径中的目录无法访问"))?;
+                if !canonical.starts_with(&root) {
+                    return Err("项目路径不能通过符号链接离开所选工作区".into());
+                }
+                if !canonical.is_dir() {
+                    return Err("项目路径中的已有部分不是文件夹".into());
+                }
+                current = canonical;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                encountered_missing = true;
+                current = candidate;
+                missing_directories.push(current.clone());
+            }
+            Err(error) => {
+                return Err(user_error(error, "无法检查项目目录，请确认工作区权限"));
+            }
+        }
+    }
+    if missing_directories.is_empty() {
+        return Err("目标项目目录已经存在，请直接选择并打开".into());
+    }
+    Ok(ProjectCreationPlan {
+        root,
+        target: current,
+        missing_directories,
+    })
+}
+
+fn rollback_created_directories(created: &[PathBuf]) {
+    for path in created.iter().rev() {
+        let _ = fs::remove_dir(path);
+    }
+}
+
+fn apply_project_creation_plan(
+    plan: ProjectCreationPlan,
+    query: &str,
+    parsed: &ParsedCommand,
+    store: &Store,
+    data: &mut AppData,
+) -> Result<CommandExecution, String> {
+    let mut created = Vec::with_capacity(plan.missing_directories.len());
+    for path in &plan.missing_directories {
+        if let Err(error) = fs::create_dir(path) {
+            rollback_created_directories(&created);
+            return Err(user_error(
+                error,
+                "创建项目目录失败，请检查名称和工作区权限",
+            ));
+        }
+        let canonical = match path.canonicalize() {
+            Ok(canonical) if canonical.starts_with(&plan.root) => canonical,
+            _ => {
+                created.push(path.clone());
+                rollback_created_directories(&created);
+                return Err("创建后的项目路径超出所选工作区，操作已取消".into());
+            }
+        };
+        created.push(canonical);
+    }
+
+    let target_text = plan.target.to_string_lossy().into_owned();
+    let args = match launch(parsed, Some(&target_text)) {
+        Ok(args) => args,
+        Err(error) => {
+            rollback_created_directories(&created);
+            return Err(error);
+        }
+    };
+
+    let mut next_data = data.clone();
+    for path in &created {
+        let path_text = path.to_string_lossy().into_owned();
+        if next_data
+            .directories
+            .iter()
+            .any(|directory| directory.path == path_text)
+        {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        next_data.directories.push(DirectoryRecord {
+            path: path_text,
+            name: name.to_string(),
+            use_count: 0,
+            last_used_at: None,
+        });
+    }
+    next_data.active_context = Some(target_text.clone());
+    record_success(
+        &mut next_data,
+        query,
+        parsed,
+        args,
+        Some(target_text),
+        HistoryActionKind::CreateDirectoryAndOpen,
+    );
+    store.save(&next_data)?;
+    *data = next_data;
+    Ok(CommandExecution::Launched)
+}
+
 #[tauri::command]
 pub fn execute_action(
     query: String,
     action_kind: CommandActionKind,
     workspace_path: String,
     store: State<'_, Store>,
-) -> Result<(), String> {
+) -> Result<CommandExecution, String> {
     let parsed = parser::parse(&query)?;
     if parsed.executable != "code" {
         return Err("当前命令不支持该候选动作".into());
     }
     let index = parsed.directory_arg_index.ok_or("当前命令没有路径参数")?;
-    let name = parsed.args.get(index).ok_or("缺少项目名称")?;
-    if !is_safe_child_name(name) {
-        return Err("目标名称只能是单个安全文件或目录名".into());
-    }
+    let name = parsed.args.get(index).ok_or("缺少项目路径")?;
+    let relative =
+        safe_relative_project_path(name).ok_or("项目路径无效，请使用不含 . 或 .. 的相对路径")?;
     let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
     let root_path = selected_workspace(&workspace_path, &data.settings)?;
-    let target = root_path.join(name);
+    let target = resolve_workspace_relative_target(&root_path, &relative)?;
     let target_text = target.to_string_lossy().into_owned();
+
+    if action_kind == CommandActionKind::CreateDirectory {
+        let plan = resolve_project_creation_plan(&root_path, name)?;
+        return Ok(CommandExecution::Confirmation {
+            confirmation: OperationConfirmation {
+                kind: OperationKind::CreateProjectDirectoryAndOpen,
+                title: format!("创建项目 {}", relative.display()),
+                description: format!(
+                    "确认后将创建 {} 个目录，并使用 VS Code 打开最终目录。",
+                    plan.missing_directories.len()
+                ),
+                target_path: plan.target.to_string_lossy().into_owned(),
+                workspace_path: plan.root.to_string_lossy().into_owned(),
+                paths_to_create: plan
+                    .missing_directories
+                    .iter()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .collect(),
+            },
+        });
+    }
 
     let args = match action_kind {
         CommandActionKind::OpenFile => {
@@ -510,45 +761,19 @@ pub fn execute_action(
             }
             launch(&parsed, Some(&target_text))?
         }
-        CommandActionKind::CreateDirectory => {
-            if target.exists() {
-                return Err("目标已经存在，请选择已有项目结果".into());
-            }
-            fs::create_dir(&target)
-                .map_err(|error| user_error(error, "创建目录失败，请检查目录名称和工作区权限"))?;
-            let args = match launch(&parsed, Some(&target_text)) {
-                Ok(args) => args,
-                Err(error) => {
-                    let _ = fs::remove_dir(&target);
-                    return Err(error);
-                }
-            };
-            data.directories.push(DirectoryRecord {
-                path: target_text.clone(),
-                name: name.clone(),
-                use_count: 0,
-                last_used_at: None,
-            });
-            args
-        }
+        CommandActionKind::CreateDirectory => unreachable!(),
     };
-    data.active_context = Some(match action_kind {
-        CommandActionKind::OpenFile => root_path.to_string_lossy().into_owned(),
-        CommandActionKind::CreateDirectory => target_text.clone(),
-    });
-    let history_action = match action_kind {
-        CommandActionKind::OpenFile => HistoryActionKind::OpenFile,
-        CommandActionKind::CreateDirectory => HistoryActionKind::CreateDirectoryAndOpen,
-    };
+    data.active_context = Some(root_path.to_string_lossy().into_owned());
     record_success(
         &mut data,
         &query,
         &parsed,
         args,
         Some(target_text),
-        history_action,
+        HistoryActionKind::OpenFile,
     );
-    store.save(&data)
+    store.save(&data)?;
+    Ok(CommandExecution::Launched)
 }
 
 #[tauri::command]
@@ -776,12 +1001,109 @@ mod tests {
     }
 
     #[test]
+    fn code_nested_relative_path_exposes_workspace_actions() {
+        let parsed = parser::parse("code x-pro/test01").unwrap();
+        let actions = candidate_actions(&parsed, Some("x-pro/test01"));
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0].kind, CommandActionKind::OpenFile);
+        assert_eq!(actions[1].kind, CommandActionKind::CreateDirectory);
+    }
+
+    #[test]
+    fn code_trailing_slash_exposes_only_directory_creation() {
+        let parsed = parser::parse("code x-pro/test01/").unwrap();
+        let actions = candidate_actions(&parsed, Some("x-pro/test01/"));
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].kind, CommandActionKind::CreateDirectory);
+    }
+
+    #[test]
     fn explicit_paths_are_not_project_search_terms() {
         assert!(!is_safe_child_name("./example"));
         assert!(!is_safe_child_name("../example"));
         assert!(!is_safe_child_name("/tmp/example"));
         assert!(!is_safe_child_name("-a"));
         assert!(is_safe_child_name("example"));
+        assert!(safe_relative_project_path("x-pro/test01").is_some());
+        assert!(safe_relative_project_path("x-pro/test01/").is_some());
+        assert!(safe_relative_project_path("./example").is_none());
+        assert!(safe_relative_project_path("x-pro/./example").is_none());
+        assert!(safe_relative_project_path("../example").is_none());
+        assert!(safe_relative_project_path("x-pro/../example").is_none());
+        assert!(safe_relative_project_path("/tmp/example").is_none());
+    }
+
+    #[test]
+    fn nested_project_plan_tracks_all_missing_directories() {
+        let root = std::env::temp_dir().join(format!("quick-command-project-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+
+        let plan = resolve_project_creation_plan(&root, "x-pro/test01").unwrap();
+        let canonical_root = root.canonicalize().unwrap();
+        assert_eq!(plan.target, canonical_root.join("x-pro/test01"));
+        assert_eq!(
+            plan.missing_directories,
+            vec![
+                canonical_root.join("x-pro"),
+                canonical_root.join("x-pro/test01")
+            ]
+        );
+
+        fs::create_dir(root.join("existing")).unwrap();
+        let plan = resolve_project_creation_plan(&root, "existing/test01").unwrap();
+        assert_eq!(
+            plan.missing_directories,
+            vec![canonical_root.join("existing/test01")]
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn nested_project_plan_rejects_existing_file_component() {
+        let root = std::env::temp_dir().join(format!("quick-command-project-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("file"), "content").unwrap();
+
+        assert!(resolve_project_creation_plan(&root, "file/test01").is_err());
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nested_project_plan_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!("quick-command-project-{}", Uuid::new_v4()));
+        let outside =
+            std::env::temp_dir().join(format!("quick-command-outside-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(&outside).unwrap();
+        symlink(&outside, root.join("escape")).unwrap();
+
+        assert!(resolve_project_creation_plan(&root, "escape/test01").is_err());
+
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(outside).unwrap();
+    }
+
+    #[test]
+    fn rollback_removes_only_new_empty_directories() {
+        let root = std::env::temp_dir().join(format!("quick-command-project-{}", Uuid::new_v4()));
+        let parent = root.join("parent");
+        let child = parent.join("child");
+        fs::create_dir_all(&child).unwrap();
+
+        rollback_created_directories(&[parent.clone(), child]);
+        assert!(!parent.exists());
+
+        fs::create_dir_all(parent.join("child")).unwrap();
+        fs::write(parent.join("child/keep.txt"), "content").unwrap();
+        rollback_created_directories(&[parent.clone(), parent.join("child")]);
+        assert!(parent.join("child/keep.txt").is_file());
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

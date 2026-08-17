@@ -33,7 +33,7 @@ Last updated: 2026-08-17
 - [x] Apply a transparent, rounded launcher window surface.
 - [x] Restore the hidden launcher from the macOS Dock and support window dragging.
 - [x] Constrain the settings overlay to the rounded launcher surface.
-- [~] Implement no-result directory creation confirmation — creation action exists; explicit path confirmation UI remains.
+- [x] Implement no-result directory creation confirmation with final-path and creation-list preview.
 - [x] Implement settings for shortcut and workspace roots.
 - [x] Register and update the global shortcut with validation, rollback, and keycap-style display.
 
@@ -58,6 +58,7 @@ Last updated: 2026-08-17
 - [x] Implement `mkdir` with workspace-bound preview, confirmation, and rollback.
 - [x] Add individual history deletion without resetting frecency.
 - [x] Persist resolved action metadata in history.
+- [x] Support confirmed multi-level project directory creation for `code`.
 
 ## Decision log
 
@@ -88,3 +89,4 @@ Last updated: 2026-08-17
 - 2026-08-17: Implemented `mkdir` as a two-phase internal operation with canonical target preview, keyboard confirmation, workspace-bound validation, index/history updates, and rollback when persistence fails.
 - 2026-08-17: Added persistent single-entry history deletion with hover/focus controls, idempotent backend handling, and tests proving directory frecency remains unchanged.
 - 2026-08-17: Added backward-compatible typed history action metadata across launcher, presentation, navigation, and filesystem operation flows, with concise labels for new and legacy records.
+- 2026-08-17: Added confirmed `code x-pro/test01` project creation with safe relative-path validation, multi-directory preview, symlink-boundary checks, structured VS Code launch, and empty-directory rollback on launch failure.

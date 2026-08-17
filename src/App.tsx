@@ -227,15 +227,9 @@ function App() {
     setBusy(true);
     setError(null);
     try {
-      await executeAction(query, action.kind, workspace.path);
-      setQuery("");
+      const command = query;
       setPendingAction(null);
-      setPresentation(null);
-      setContextUpdate(null);
-      setConfirmation(null);
-      setOperationResult(null);
-      setState(await loadState());
-      await hideLauncher();
+      await applyExecutionResult(command, await executeAction(command, action.kind, workspace.path));
     } catch (reason) {
       setError(describeError(reason));
     } finally {
@@ -269,7 +263,7 @@ function App() {
     setBusy(true);
     setError(null);
     try {
-      await applyExecutionResult(query, await confirmOperation(query, confirmation.kind, confirmation.targetPath));
+      await applyExecutionResult(query, await confirmOperation(query, confirmation.kind, confirmation.targetPath, confirmation.workspacePath));
     } catch (reason) {
       setError(describeError(reason));
     } finally {

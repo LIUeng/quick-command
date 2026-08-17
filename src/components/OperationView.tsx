@@ -9,6 +9,7 @@ type ConfirmationViewProps = {
 };
 
 export function OperationConfirmationView({ confirmation, busy, onCancel, onConfirm }: ConfirmationViewProps) {
+  const confirmLabel = confirmation.kind === "create-project-directory-and-open" ? "创建并打开" : "创建目录";
   return (
     <section className="grid h-full place-items-center px-6 py-8">
       <div className="w-full max-w-lg rounded-2xl border border-amber-300/15 bg-amber-300/[0.055] p-6">
@@ -22,13 +23,21 @@ export function OperationConfirmationView({ confirmation, busy, onCancel, onConf
         <div className="mt-5 rounded-xl border border-white/10 bg-zinc-950/65 p-4">
           <div className="text-[10px] uppercase tracking-widest text-zinc-600">最终路径</div>
           <div className="mt-1 break-all font-mono text-xs leading-5 text-zinc-300">{confirmation.targetPath}</div>
+          {confirmation.pathsToCreate.length > 0 && (
+            <div className="mt-3 border-t border-white/5 pt-3">
+              <div className="text-[10px] uppercase tracking-widest text-zinc-600">将创建 {confirmation.pathsToCreate.length} 个目录</div>
+              <div className="mt-2 grid gap-1.5">
+                {confirmation.pathsToCreate.map((path) => <div className="break-all font-mono text-[11px] leading-4 text-zinc-500" key={path}>{path}</div>)}
+              </div>
+            </div>
+          )}
           <div className="mt-3 flex items-center gap-2 border-t border-white/5 pt-3 text-xs text-zinc-600"><ShieldCheck className="h-4 w-4 text-emerald-400" /><span className="truncate" title={confirmation.workspacePath}>限制在工作区 {confirmation.workspacePath}</span></div>
         </div>
         <div className="mt-5 flex items-center justify-between">
           <span className="text-xs text-zinc-600">Enter 确认 · Esc 取消</span>
           <div className="flex gap-2">
             <button className="secondary-button" onClick={onCancel} disabled={busy}>取消</button>
-            <button className="primary-button inline-flex items-center gap-2" onClick={onConfirm} disabled={busy}><FolderPlus className="h-4 w-4" />创建目录</button>
+            <button className="primary-button inline-flex items-center gap-2" onClick={onConfirm} disabled={busy}><FolderPlus className="h-4 w-4" />{confirmLabel}</button>
           </div>
         </div>
       </div>

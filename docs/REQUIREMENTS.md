@@ -58,12 +58,16 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 - Existing absolute or relative paths are resolved by filesystem type.
 - A trailing path separator expresses directory intent.
 - A plain argument such as `code example` searches indexed project directories and the active context, then presents explicit actions when the result is ambiguous.
+- A safe multi-level relative argument such as `code x-pro/test01` can create the missing project-directory chain below a selected workspace after explicit confirmation.
 - A missing `code` target must not silently become a directory. The user chooses between opening a file path, creating a project directory, or executing the original path intent.
 - File lookup is performed on demand and is not included in the global directory index by default.
 
 ### Directory creation
 
 - When no project matches, offer directory creation as one explicit action below a user-selected workspace root.
+- Before creating a project-directory chain, show the final absolute target and every missing directory that will be created.
+- Reject absolute paths, `.` and `..` components, explicit `./` paths, and symbolic-link paths that leave the selected workspace.
+- If launching VS Code fails, remove only the empty directories created by that operation, in reverse order.
 - `mkdir` resolves exactly one directory under the active context or an explicitly selected workspace and requires confirmation before writing.
 - Show the final absolute path before creation.
 - Reject traversal outside the workspace root.
@@ -112,3 +116,4 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 13. `cd` resolves indexed, relative, parent, and absolute directories inside enabled workspaces and updates application context without spawning a process.
 14. `mkdir example` previews the canonical target, creates only after confirmation, and never writes outside an enabled workspace.
 15. New successful history entries retain their resolved action type, while history written by older versions continues to load.
+16. `code x-pro/test01` previews and creates all missing directories inside the selected workspace, then opens the final project directory.

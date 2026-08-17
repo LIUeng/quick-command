@@ -92,6 +92,17 @@ Command categories are user-facing labels. Runtime behavior is driven by explici
 
 `code example` is intentionally treated as file-or-directory. If no exact existing path resolves it, the resolver returns multiple candidate actions rather than silently creating a directory.
 
+For a safe multi-level project path such as `code x-pro/test01`, project creation uses a two-phase plan:
+
+1. Canonicalize the selected enabled workspace.
+2. Walk each existing path component, requiring directories and rejecting symbolic-link resolution outside that workspace.
+3. Record each missing directory without writing and return the final path plus creation list for confirmation.
+4. Reparse the command and recompute the plan at confirmation time; the recomputed workspace and target must match the preview.
+5. Create missing directories one at a time and launch `code` with the final absolute path through a structured argument array.
+6. If launch fails, remove only directories created by this operation, in reverse order and only while they remain empty.
+
+An explicit `./` argument retains command-line path semantics and does not enter the workspace project-creation flow. A trailing separator expresses directory intent and suppresses the open-as-file candidate.
+
 ## Presentation output contract
 
 - `ls` and `ll` are implemented through Rust filesystem metadata rather than spawning a shell command and parsing stdout.
@@ -126,6 +137,7 @@ Command categories are user-facing labels. Runtime behavior is driven by explici
 - Preview resolves a canonical existing parent and returns the final target and owning workspace without writing to disk.
 - Confirmation reparses the original command and recomputes the target; client-provided paths are accepted only when they exactly match the recomputed plan.
 - The first safe flow creates one directory only. Options and recursive parent creation are rejected.
+- The single-directory restriction applies to `mkdir`; confirmed `code` project creation has a separate workspace-rooted multi-level plan.
 - Successful creation updates the in-memory index and history. If state persistence fails, the newly created empty directory is removed as a rollback.
 - The active context remains unchanged after creation, matching normal `mkdir` behavior.
 
