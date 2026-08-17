@@ -1,15 +1,18 @@
-import { FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Clock3, Command, Folder, Keyboard, LoaderCircle, Plus, RefreshCw, Search, Settings2 } from "lucide-react";
+import { FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
+import { Clock3, Command, FilePlus2, Folder, FolderPlus, Keyboard, LoaderCircle, Search, Settings2 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { createAndExecute, execute, loadState, reindex, saveSettings, search } from "./lib/api";
-import type { LauncherState, QueryResponse, SearchResult, Settings } from "./lib/types";
+import { execute, executeAction, loadState, saveSettings, search, setActiveContext } from "./lib/api";
+import type { CommandAction, CommandExecution, LauncherState, PresentationEntry, PresentationOutput, QueryResponse, SearchResult, Settings, Workspace } from "./lib/types";
+import { PresentationView } from "./components/PresentationView";
+import { WorkspaceList } from "./components/WorkspaceList";
+import { WorkspacePicker } from "./components/WorkspacePicker";
 
 const emptyQuery: QueryResponse = {
   executable: null,
   directoryQuery: null,
   results: [],
+  actions: [],
   history: [],
-  canCreate: false,
 };
 
 function describeError(error: unknown) {
@@ -98,6 +101,10 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<CommandAction | null>(null);
+  const [contextPickerOpen, setContextPickerOpen] = useState(false);
+  const [pendingContextQuery, setPendingContextQuery] = useState<string | null>(null);
+  const [presentation, setPresentation] = useState<PresentationOutput | null>(null);
 
   useEffect(() => {
     loadState().then(setState).catch((reason) => setError(describeError(reason)));
@@ -110,6 +117,10 @@ function App() {
         .then((next) => {
           setResponse(next);
           setSelected(0);
+          setPendingAction(null);
+          setContextPickerOpen(false);
+          setPendingContextQuery(null);
+          setPresentation(null);
           setError(null);
         })
         .catch((reason) => setError(describeError(reason)));
@@ -119,17 +130,39 @@ function App() {
 
   const visibleHistory = query.trim() === "" ? state?.history ?? [] : response.history;
   const choices = response.results;
-  const selectionCount = choices.length + (response.canCreate ? 1 : 0);
+  const enabledWorkspaces = state?.settings.workspaces.filter((workspace) => workspace.enabled) ?? [];
+  const choosingWorkspace = pendingAction !== null || contextPickerOpen || pendingContextQuery !== null;
+  const selectionCount = choosingWorkspace ? enabledWorkspaces.length : presentation ? 0 : choices.length + response.actions.length;
+
+  async function applyExecutionResult(command: string, result: CommandExecution) {
+    if (result.kind === "needs-context") {
+      if (!enabledWorkspaces.length) {
+        setError("请先在设置中添加工作区，再执行需要目录上下文的命令");
+        return;
+      }
+      setPendingContextQuery(command);
+      setSelected(0);
+      setError(null);
+      return;
+    }
+    setState(await loadState());
+    if (result.kind === "presented") {
+      setPresentation(result.output);
+      setPendingContextQuery(null);
+      return;
+    }
+    setQuery("");
+    setPresentation(null);
+    await hideLauncher();
+  }
 
   async function run(target?: SearchResult) {
     if (!query.trim()) return;
     setBusy(true);
     setError(null);
     try {
-      await execute(query, target?.path);
-      setQuery("");
-      setState(await loadState());
-      await hideLauncher();
+      const command = query;
+      await applyExecutionResult(command, await execute(command, target?.path));
     } catch (reason) {
       setError(describeError(reason));
     } finally {
@@ -138,18 +171,41 @@ function App() {
     }
   }
 
-  async function createProject() {
+  async function runAction(action: CommandAction, workspace: Workspace) {
     setBusy(true);
     setError(null);
     try {
-      await createAndExecute(query);
+      await executeAction(query, action.kind, workspace.path);
       setQuery("");
+      setPendingAction(null);
+      setPresentation(null);
       setState(await loadState());
       await hideLauncher();
     } catch (reason) {
       setError(describeError(reason));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function chooseContext(workspace: Workspace) {
+    setBusy(true);
+    setError(null);
+    try {
+      const nextState = await setActiveContext(workspace.path);
+      setState(nextState);
+      setContextPickerOpen(false);
+      setSelected(0);
+      if (pendingContextQuery) {
+        const command = pendingContextQuery;
+        setPendingContextQuery(null);
+        await applyExecutionResult(command, await execute(command));
+      }
+    } catch (reason) {
+      setError(describeError(reason));
+    } finally {
+      setBusy(false);
+      inputRef.current?.focus();
     }
   }
 
@@ -162,11 +218,21 @@ function App() {
       setSelected((value) => (value - 1 + selectionCount) % selectionCount);
     } else if (event.key === "Enter") {
       event.preventDefault();
-      if (selected < choices.length) void run(choices[selected]);
-      else if (response.canCreate) void createProject();
+      if (pendingAction && enabledWorkspaces[selected]) void runAction(pendingAction, enabledWorkspaces[selected]);
+      else if (pendingContextQuery && enabledWorkspaces[selected]) void chooseContext(enabledWorkspaces[selected]);
+      else if (contextPickerOpen && enabledWorkspaces[selected]) void chooseContext(enabledWorkspaces[selected]);
+      else if (selected < choices.length) void run(choices[selected]);
+      else if (response.actions[selected - choices.length]) {
+        if (!enabledWorkspaces.length) setError("请先在设置中添加工作区");
+        else { setPendingAction(response.actions[selected - choices.length]); setSelected(0); }
+      }
       else void run();
     } else if (event.key === "Escape") {
-      if (settingsOpen) setSettingsOpen(false);
+      if (pendingAction) { setPendingAction(null); setSelected(0); }
+      else if (pendingContextQuery) { setPendingContextQuery(null); setSelected(0); }
+      else if (contextPickerOpen) { setContextPickerOpen(false); setSelected(0); }
+      else if (settingsOpen) setSettingsOpen(false);
+      else if (presentation) setPresentation(null);
       else void hideLauncher();
     }
   }
@@ -184,7 +250,7 @@ function App() {
           <input
             ref={inputRef}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => { setPresentation(null); setQuery(event.target.value); }}
             onKeyDown={onKeyDown}
             className="min-w-0 flex-1 cursor-text bg-transparent text-lg outline-none placeholder:text-zinc-600"
             placeholder="输入命令，例如 code example"
@@ -196,10 +262,10 @@ function App() {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        <div className={`min-h-0 flex-1 p-2 ${presentation ? "overflow-hidden" : "overflow-y-auto"}`}>
           {error && <div className="m-2 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</div>}
 
-          {query.trim() !== "" && choices.map((item, index) => (
+          {query.trim() !== "" && !choosingWorkspace && !presentation && choices.map((item, index) => (
             <button key={item.path} className={`result-row ${selected === index ? "result-row-active" : ""}`} onClick={() => void run(item)}>
               <Folder className="h-5 w-5 shrink-0 text-indigo-400" />
               <span className="min-w-0 flex-1 text-left">
@@ -210,14 +276,31 @@ function App() {
             </button>
           ))}
 
-          {query.trim() !== "" && response.canCreate && (
-            <button className={`result-row ${selected === choices.length ? "result-row-active" : ""}`} onClick={() => void createProject()}>
-              <Plus className="h-5 w-5 text-emerald-400" />
-              <span className="text-left"><span className="block font-medium">创建并打开项目</span><span className="text-xs text-zinc-500">在默认工作区中创建 {response.directoryQuery}</span></span>
-            </button>
-          )}
+          {query.trim() !== "" && !choosingWorkspace && !presentation && response.actions.map((action, actionIndex) => {
+            const index = choices.length + actionIndex;
+            const ActionIcon = action.kind === "open-file" ? FilePlus2 : FolderPlus;
+            return <button key={action.id} className={`result-row ${selected === index ? "result-row-active" : ""}`} onClick={() => {
+              if (!enabledWorkspaces.length) setError("请先在设置中添加工作区");
+              else { setPendingAction(action); setSelected(0); }
+            }}>
+              <ActionIcon className={`h-5 w-5 ${action.kind === "open-file" ? "text-sky-400" : "text-emerald-400"}`} />
+              <span className="text-left"><span className="block font-medium">{action.label}</span><span className="text-xs text-zinc-500">{action.description}</span></span>
+            </button>;
+          })}
 
-          {query.trim() === "" && (
+          {query.trim() !== "" && pendingAction && <WorkspacePicker title={`为“${pendingAction.label}”选择工作区`} workspaces={enabledWorkspaces} activeContext={state.activeContext} selected={selected} onBack={() => { setPendingAction(null); setSelected(0); }} onSelect={(workspace) => void runAction(pendingAction, workspace)} />}
+
+          {pendingContextQuery && <WorkspacePicker title="选择本次命令的目录上下文" workspaces={enabledWorkspaces} activeContext={state.activeContext} selected={selected} onBack={() => { setPendingContextQuery(null); setSelected(0); }} onSelect={(workspace) => void chooseContext(workspace)} />}
+
+          {contextPickerOpen && !pendingContextQuery && <WorkspacePicker title="选择活动上下文" workspaces={enabledWorkspaces} activeContext={state.activeContext} selected={selected} onBack={() => { setContextPickerOpen(false); setSelected(0); }} onSelect={(workspace) => void chooseContext(workspace)} />}
+
+          {presentation && !choosingWorkspace && <PresentationView output={presentation} onClose={() => setPresentation(null)} onOpenEntry={(entry: PresentationEntry) => {
+            const nextQuery = `${entry.kind === "directory" ? "ls" : "cat"} ${JSON.stringify(entry.path)}`;
+            setPresentation(null);
+            setQuery(nextQuery);
+          }} />}
+
+          {query.trim() === "" && !choosingWorkspace && !presentation && (
             <>
               <div className="flex items-center justify-between px-3 pb-2 pt-1 text-xs uppercase tracking-widest text-zinc-600">
                 <span>最近使用</span><span>{state.indexedDirectoryCount} 个项目已索引</span>
@@ -234,7 +317,13 @@ function App() {
         </div>
 
         <footer className="flex items-center justify-between border-t border-white/10 px-5 py-3 text-xs text-zinc-600">
-          <span className="flex items-center gap-2"><Command className="h-3.5 w-3.5" /> Enter 执行 · ↑↓ 选择 · Esc 隐藏</span>
+          <button className="flex min-w-0 items-center gap-2 hover:text-zinc-300" onClick={() => {
+            if (!enabledWorkspaces.length) setError("请先在设置中添加工作区");
+            else { setContextPickerOpen(true); setPendingAction(null); setPendingContextQuery(null); setPresentation(null); setSelected(0); }
+          }} title={state.activeContext ?? "选择活动上下文"}>
+            <Folder className="h-3.5 w-3.5 shrink-0" />
+            <span className="max-w-52 truncate">{state.activeContext?.split("/").pop() ?? "选择上下文"}</span>
+          </button>
           <ShortcutKeys shortcut={state.settings.shortcut} />
         </footer>
       </section>
@@ -250,11 +339,10 @@ function EmptyState() {
 
 function SettingsDialog({ state, onClose, onChange }: { state: LauncherState; onClose: () => void; onChange: (state: LauncherState) => void }) {
   const [form, setForm] = useState<Settings>(state.settings);
-  const [workspaceText, setWorkspaceText] = useState(state.settings.workspaces.map((item) => item.path).join("\n"));
+  const [workspaces, setWorkspaces] = useState(state.settings.workspaces);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recordingShortcut, setRecordingShortcut] = useState(false);
-  const workspaceCount = useMemo(() => workspaceText.split("\n").filter((line) => line.trim()).length, [workspaceText]);
 
   useEffect(() => {
     if (!recordingShortcut) return;
@@ -294,8 +382,7 @@ function SettingsDialog({ state, onClose, onChange }: { state: LauncherState; on
     setBusy(true);
     setError(null);
     try {
-      const workspaces = workspaceText.split("\n").map((path) => path.trim()).filter(Boolean).map((path) => ({ path, enabled: true }));
-      const next = await saveSettings({ ...form, defaultWorkspace: workspaces[0]?.path ?? null, workspaces });
+      const next = await saveSettings({ ...form, defaultWorkspace: null, workspaces });
       onChange(next);
       onClose();
     } catch (reason) {
@@ -305,15 +392,9 @@ function SettingsDialog({ state, onClose, onChange }: { state: LauncherState; on
     }
   }
 
-  async function rebuild() {
-    setBusy(true);
-    setError(null);
-    try { onChange(await reindex()); } catch (reason) { setError(describeError(reason)); } finally { setBusy(false); }
-  }
-
   return (
     <div className="fixed inset-3 z-20 grid place-items-center overflow-hidden rounded-2xl bg-black/70 p-6 backdrop-blur-sm" onMouseDown={onClose}>
-      <form className="settings-surface w-full max-w-xl overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 p-6" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+      <form className="settings-surface max-h-full w-full max-w-xl overflow-y-auto rounded-2xl border border-white/10 bg-zinc-900 p-6" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
         <h2 className="text-lg font-semibold">设置</h2>
         <label className="field-label">全局快捷键
           <button type="button" className={`shortcut-recorder ${recordingShortcut ? "shortcut-recorder-active" : ""}`} onClick={() => { setError(null); setRecordingShortcut(true); }}>
@@ -322,11 +403,11 @@ function SettingsDialog({ state, onClose, onChange }: { state: LauncherState; on
             <span className={`ml-auto text-xs ${recordingShortcut ? "text-indigo-300" : "text-zinc-600"}`}>{recordingShortcut ? "请按下组合键…" : "点击开始录制"}</span>
           </button>
         </label>
-        <label className="field-label">工作区目录（每行一个）<textarea className="field-input min-h-32 resize-y" value={workspaceText} onChange={(event) => setWorkspaceText(event.target.value)} placeholder="/Users/you/Projects" /></label>
+        <WorkspaceList workspaces={workspaces} disabled={busy} onChange={setWorkspaces} onError={(message) => setError(message || null)} />
         {error && <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</div>}
         <div className="mt-5 flex items-center justify-between">
-          <button type="button" className="secondary-button" onClick={() => void rebuild()} disabled={busy}><RefreshCw className="h-4 w-4" />重建索引</button>
-          <div className="flex items-center gap-2"><span className="mr-2 text-xs text-zinc-600">{workspaceCount} 个工作区</span><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" disabled={busy}>保存</button></div>
+          <span className="text-xs text-zinc-600">保存后自动重建索引</span>
+          <div className="flex items-center gap-2"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" disabled={busy}>保存</button></div>
         </div>
       </form>
     </div>

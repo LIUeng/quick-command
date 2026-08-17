@@ -1,13 +1,36 @@
-use crate::{errors::user_error, models::*, parser, search, store::Store};
-use std::{collections::HashMap, fs, path::Path, process::Command, time::{SystemTime, UNIX_EPOCH}};
+use crate::{
+    command_catalog::{definition_for, ExecutionMode},
+    errors::user_error,
+    models::*,
+    parser, presentation, search,
+    store::Store,
+    window_behavior::WindowBehavior,
+};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+    process::Command,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tauri::{AppHandle, State};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use uuid::Uuid;
 
-fn now() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() }
+fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
 
 fn snapshot(data: &AppData) -> LauncherState {
-    LauncherState { settings: data.settings.clone(), history: data.history.iter().take(30).cloned().collect(), indexed_directory_count: data.directories.len() }
+    LauncherState {
+        settings: data.settings.clone(),
+        active_context: data.active_context.clone(),
+        history: data.history.iter().take(30).cloned().collect(),
+        indexed_directory_count: data.directories.len(),
+    }
 }
 
 #[tauri::command]
@@ -20,111 +43,389 @@ pub fn get_launcher_state(store: State<'_, Store>) -> Result<LauncherState, Stri
 pub fn search_projects(query: String, store: State<'_, Store>) -> Result<QueryResponse, String> {
     let data = store.data.lock().map_err(|_| "无法读取应用状态")?;
     if query.trim().is_empty() {
-        return Ok(QueryResponse { executable: None, directory_query: None, results: vec![], history: data.history.iter().take(30).cloned().collect(), can_create: false });
+        return Ok(QueryResponse {
+            executable: None,
+            directory_query: None,
+            results: vec![],
+            actions: vec![],
+            history: data.history.iter().take(30).cloned().collect(),
+        });
     }
     let parsed = parser::parse(&query)?;
-    let directory_query = parsed.directory_arg_index.and_then(|index| parsed.args.get(index)).cloned();
-    let results = directory_query.as_ref().map(|value| search::rank(value, &data.directories, 20)).unwrap_or_default();
-    let can_create = directory_query.is_some() && results.is_empty() && data.settings.default_workspace.is_some();
-    Ok(QueryResponse { executable: Some(parsed.executable), directory_query, results, history: vec![], can_create })
+    let directory_query = parsed
+        .directory_arg_index
+        .and_then(|index| parsed.args.get(index))
+        .cloned();
+    let results = directory_query
+        .as_ref()
+        .map(|value| search::rank(value, &data.directories, 20))
+        .unwrap_or_default();
+    let actions = candidate_actions(&parsed, directory_query.as_deref());
+    Ok(QueryResponse {
+        executable: Some(parsed.executable),
+        directory_query,
+        results,
+        actions,
+        history: vec![],
+    })
+}
+
+fn candidate_actions(parsed: &ParsedCommand, target: Option<&str>) -> Vec<CommandAction> {
+    let Some(target) = target else { return vec![] };
+    if parsed.executable != "code" || !is_safe_child_name(target) {
+        return vec![];
+    }
+
+    vec![
+        CommandAction {
+            id: "open-file".into(),
+            kind: CommandActionKind::OpenFile,
+            label: "作为文件打开".into(),
+            description: format!("选择工作区后使用 VS Code 打开 {target}"),
+            requires_workspace: true,
+        },
+        CommandAction {
+            id: "create-directory".into(),
+            kind: CommandActionKind::CreateDirectory,
+            label: "创建项目目录并打开".into(),
+            description: format!("选择工作区后创建目录 {target}"),
+            requires_workspace: true,
+        },
+    ]
+}
+
+fn is_safe_child_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.ends_with('/')
+        && Path::new(name).components().count() == 1
 }
 
 fn validate_target(target: &Path, settings: &Settings) -> Result<(), String> {
-    let canonical = target.canonicalize().map_err(|_| format!("目录不存在: {}", target.display()))?;
-    let allowed = settings.workspaces.iter().filter(|item| item.enabled).any(|workspace| {
-        Path::new(&workspace.path).canonicalize().is_ok_and(|root| canonical.starts_with(root))
-    });
-    if allowed { Ok(()) } else { Err("目标目录不在已启用的工作区中".into()) }
+    let canonical = target
+        .canonicalize()
+        .map_err(|_| format!("目录不存在: {}", target.display()))?;
+    let allowed = settings
+        .workspaces
+        .iter()
+        .filter(|item| item.enabled)
+        .any(|workspace| {
+            Path::new(&workspace.path)
+                .canonicalize()
+                .is_ok_and(|root| canonical.starts_with(root))
+        });
+    if allowed {
+        Ok(())
+    } else {
+        Err("目标目录不在已启用的工作区中".into())
+    }
+}
+
+fn normalized_context(path: &str, settings: &Settings) -> Result<String, String> {
+    let target = Path::new(path)
+        .canonicalize()
+        .map_err(|error| user_error(error, "所选上下文不存在或无法访问"))?;
+    if !target.is_dir() {
+        return Err("活动上下文必须是文件夹".into());
+    }
+    validate_target(&target, settings)?;
+    Ok(target.to_string_lossy().into_owned())
 }
 
 fn launch(parsed: &ParsedCommand, target_path: Option<&str>) -> Result<Vec<String>, String> {
     let mut args = parsed.args.clone();
     if let (Some(index), Some(target)) = (parsed.directory_arg_index, target_path) {
-        if index >= args.len() { return Err("目录参数位置无效".into()); }
+        if index >= args.len() {
+            return Err("目录参数位置无效".into());
+        }
         args[index] = target.to_string();
     }
-    Command::new(&parsed.executable).args(&args).spawn().map_err(|error| {
-        user_error(error, &format!("无法启动 {}，请确认该命令在应用 PATH 中可用", parsed.executable))
-    })?;
+    Command::new(&parsed.executable)
+        .args(&args)
+        .spawn()
+        .map_err(|error| {
+            user_error(
+                error,
+                &format!(
+                    "无法启动 {}，请确认该命令在应用 PATH 中可用",
+                    parsed.executable
+                ),
+            )
+        })?;
     Ok(args)
 }
 
-fn record_success(data: &mut AppData, query: &str, parsed: &ParsedCommand, args: Vec<String>, target_path: Option<String>) {
+fn record_success(
+    data: &mut AppData,
+    query: &str,
+    parsed: &ParsedCommand,
+    args: Vec<String>,
+    target_path: Option<String>,
+) {
     let timestamp = now();
     if let Some(target) = target_path.as_ref() {
-        if let Some(record) = data.directories.iter_mut().find(|record| &record.path == target) {
+        if let Some(record) = data
+            .directories
+            .iter_mut()
+            .find(|record| &record.path == target)
+        {
             record.use_count += 1;
             record.last_used_at = Some(timestamp);
         }
     }
-    data.history.insert(0, HistoryItem { id: Uuid::new_v4().to_string(), display_text: query.to_string(), executable: parsed.executable.clone(), args, target_path, executed_at: timestamp });
+    data.history.insert(
+        0,
+        HistoryItem {
+            id: Uuid::new_v4().to_string(),
+            display_text: query.to_string(),
+            executable: parsed.executable.clone(),
+            args,
+            target_path,
+            executed_at: timestamp,
+        },
+    );
     data.history.truncate(200);
 }
 
 #[tauri::command]
-pub fn execute_command(query: String, target_path: Option<String>, store: State<'_, Store>) -> Result<(), String> {
+pub fn execute_command(
+    query: String,
+    target_path: Option<String>,
+    store: State<'_, Store>,
+) -> Result<CommandExecution, String> {
     let parsed = parser::parse(&query)?;
     let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
-    if let Some(target) = target_path.as_ref() { validate_target(Path::new(target), &data.settings)?; }
+    if definition_for(&parsed.executable).execution_mode == ExecutionMode::Capture {
+        return match presentation::execute(&parsed, &data)? {
+            presentation::PresentationResolution::NeedsContext => {
+                Ok(CommandExecution::NeedsContext {
+                    message: "请选择工作区作为本次查看的目录上下文".into(),
+                })
+            }
+            presentation::PresentationResolution::Ready(result) => {
+                data.active_context = result.active_context;
+                record_success(
+                    &mut data,
+                    &query,
+                    &parsed,
+                    result.effective_args,
+                    Some(result.target_path),
+                );
+                store.save(&data)?;
+                Ok(CommandExecution::Presented {
+                    output: result.output,
+                })
+            }
+        };
+    }
+    if let Some(target) = target_path.as_ref() {
+        validate_target(Path::new(target), &data.settings)?;
+    }
     let args = launch(&parsed, target_path.as_deref())?;
+    if let Some(target) = target_path.as_deref() {
+        if Path::new(target).is_dir() {
+            data.active_context = Some(normalized_context(target, &data.settings)?);
+        }
+    }
     record_success(&mut data, &query, &parsed, args, target_path);
-    store.save(&data)
+    store.save(&data)?;
+    Ok(CommandExecution::Launched)
+}
+
+fn selected_workspace(path: &str, settings: &Settings) -> Result<std::path::PathBuf, String> {
+    let selected = Path::new(path)
+        .canonicalize()
+        .map_err(|error| user_error(error, "所选工作区不存在或无法访问"))?;
+    let allowed = settings
+        .workspaces
+        .iter()
+        .filter(|workspace| workspace.enabled)
+        .any(|workspace| {
+            Path::new(&workspace.path)
+                .canonicalize()
+                .is_ok_and(|configured| configured == selected)
+        });
+    if allowed {
+        Ok(selected)
+    } else {
+        Err("所选目录不在已配置的工作区中".into())
+    }
 }
 
 #[tauri::command]
-pub fn create_and_execute(query: String, store: State<'_, Store>) -> Result<(), String> {
+pub fn execute_action(
+    query: String,
+    action_kind: CommandActionKind,
+    workspace_path: String,
+    store: State<'_, Store>,
+) -> Result<(), String> {
     let parsed = parser::parse(&query)?;
-    let index = parsed.directory_arg_index.ok_or("当前命令没有可创建的目录参数")?;
+    if parsed.executable != "code" {
+        return Err("当前命令不支持该候选动作".into());
+    }
+    let index = parsed.directory_arg_index.ok_or("当前命令没有路径参数")?;
     let name = parsed.args.get(index).ok_or("缺少项目名称")?;
-    if name.is_empty() || name == "." || name == ".." || Path::new(name).components().count() != 1 { return Err("项目名称只能是单个安全目录名".into()); }
+    if !is_safe_child_name(name) {
+        return Err("目标名称只能是单个安全文件或目录名".into());
+    }
     let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
-    let root = data.settings.default_workspace.as_ref().ok_or("请先设置默认工作区")?;
-    let root_path = Path::new(root).canonicalize().map_err(|_| "默认工作区不存在")?;
+    let root_path = selected_workspace(&workspace_path, &data.settings)?;
     let target = root_path.join(name);
-    fs::create_dir(&target).map_err(|error| user_error(error, "创建目录失败，请检查目录名称和工作区权限"))?;
     let target_text = target.to_string_lossy().into_owned();
-    data.directories.push(DirectoryRecord { path: target_text.clone(), name: name.clone(), use_count: 0, last_used_at: None });
-    let args = match launch(&parsed, Some(&target_text)) {
-        Ok(args) => args,
-        Err(error) => { let _ = fs::remove_dir(&target); return Err(error); }
+
+    let args = match action_kind {
+        CommandActionKind::OpenFile => {
+            if target.is_dir() {
+                return Err("目标已经是文件夹，请选择项目结果或使用创建目录动作".into());
+            }
+            launch(&parsed, Some(&target_text))?
+        }
+        CommandActionKind::CreateDirectory => {
+            if target.exists() {
+                return Err("目标已经存在，请选择已有项目结果".into());
+            }
+            fs::create_dir(&target)
+                .map_err(|error| user_error(error, "创建目录失败，请检查目录名称和工作区权限"))?;
+            let args = match launch(&parsed, Some(&target_text)) {
+                Ok(args) => args,
+                Err(error) => {
+                    let _ = fs::remove_dir(&target);
+                    return Err(error);
+                }
+            };
+            data.directories.push(DirectoryRecord {
+                path: target_text.clone(),
+                name: name.clone(),
+                use_count: 0,
+                last_used_at: None,
+            });
+            args
+        }
     };
+    data.active_context = Some(match action_kind {
+        CommandActionKind::OpenFile => root_path.to_string_lossy().into_owned(),
+        CommandActionKind::CreateDirectory => target_text.clone(),
+    });
     record_success(&mut data, &query, &parsed, args, Some(target_text));
     store.save(&data)
 }
 
-fn scan_root(root: &Path, max_depth: usize, output: &mut Vec<DirectoryRecord>) -> Result<(), String> {
+#[tauri::command]
+pub fn set_active_context(
+    path: Option<String>,
+    store: State<'_, Store>,
+) -> Result<LauncherState, String> {
+    let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
+    data.active_context = path
+        .as_deref()
+        .map(|value| normalized_context(value, &data.settings))
+        .transpose()?;
+    store.save(&data)?;
+    Ok(snapshot(&data))
+}
+
+fn scan_root(
+    root: &Path,
+    max_depth: usize,
+    output: &mut Vec<DirectoryRecord>,
+) -> Result<(), String> {
     fn visit(path: &Path, depth: usize, max_depth: usize, output: &mut Vec<DirectoryRecord>) {
-        if depth > max_depth { return; }
-        let Ok(entries) = fs::read_dir(path) else { return; };
+        if depth > max_depth {
+            return;
+        }
+        let Ok(entries) = fs::read_dir(path) else {
+            return;
+        };
         for entry in entries.flatten() {
-            let Ok(file_type) = entry.file_type() else { continue; };
-            if !file_type.is_dir() { continue; }
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') || matches!(name.as_str(), "node_modules" | "target" | "dist" | "build") { continue; }
+            if name.starts_with('.')
+                || matches!(name.as_str(), "node_modules" | "target" | "dist" | "build")
+            {
+                continue;
+            }
             let child = entry.path();
-            output.push(DirectoryRecord { path: child.to_string_lossy().into_owned(), name, use_count: 0, last_used_at: None });
+            output.push(DirectoryRecord {
+                path: child.to_string_lossy().into_owned(),
+                name,
+                use_count: 0,
+                last_used_at: None,
+            });
             visit(&child, depth + 1, max_depth, output);
         }
     }
-    if !root.is_dir() { return Err(format!("工作区不存在: {}", root.display())); }
+    if !root.is_dir() {
+        return Err(format!("工作区不存在: {}", root.display()));
+    }
     visit(root, 1, max_depth, output);
     Ok(())
 }
 
 fn rebuild(data: &mut AppData) -> Result<(), String> {
-    let old: HashMap<_, _> = data.directories.iter().map(|item| (item.path.clone(), (item.use_count, item.last_used_at))).collect();
+    let old: HashMap<_, _> = data
+        .directories
+        .iter()
+        .map(|item| (item.path.clone(), (item.use_count, item.last_used_at)))
+        .collect();
     let mut directories = vec![];
-    for workspace in data.settings.workspaces.iter().filter(|item| item.enabled) { scan_root(Path::new(&workspace.path), 4, &mut directories)?; }
+    for workspace in data.settings.workspaces.iter().filter(|item| item.enabled) {
+        scan_root(Path::new(&workspace.path), 4, &mut directories)?;
+    }
     directories.sort_by(|left, right| left.path.cmp(&right.path));
     directories.dedup_by(|left, right| left.path == right.path);
-    for item in &mut directories { if let Some((count, used)) = old.get(&item.path) { item.use_count = *count; item.last_used_at = *used; } }
+    for item in &mut directories {
+        if let Some((count, used)) = old.get(&item.path) {
+            item.use_count = *count;
+            item.last_used_at = *used;
+        }
+    }
     data.directories = directories;
     Ok(())
 }
 
+fn normalize_workspaces(settings: &mut Settings) -> Result<(), String> {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::with_capacity(settings.workspaces.len());
+
+    for workspace in &settings.workspaces {
+        let canonical = Path::new(&workspace.path)
+            .canonicalize()
+            .map_err(|error| user_error(error, "工作区不存在或无法访问"))?;
+        if !canonical.is_dir() {
+            return Err("工作区必须是文件夹".into());
+        }
+        if seen.insert(canonical.clone()) {
+            normalized.push(Workspace {
+                path: canonical.to_string_lossy().into_owned(),
+                enabled: workspace.enabled,
+            });
+        }
+    }
+
+    let normalized_default = settings.default_workspace.as_ref().and_then(|path| {
+        Path::new(path)
+            .canonicalize()
+            .ok()
+            .map(|path| path.to_string_lossy().into_owned())
+    });
+    settings.default_workspace = normalized_default
+        .filter(|path| normalized.iter().any(|workspace| &workspace.path == path));
+    settings.workspaces = normalized;
+    Ok(())
+}
+
 fn replace_shortcut(app: &AppHandle, previous: &str, next: &str) -> Result<(), String> {
-    if previous == next { return Ok(()); }
-    app.global_shortcut().unregister(previous)
+    if previous == next {
+        return Ok(());
+    }
+    app.global_shortcut()
+        .unregister(previous)
         .map_err(|error| user_error(error, "无法更新快捷键，请重启应用后重试"))?;
     if let Err(error) = app.global_shortcut().register(next) {
         let _ = app.global_shortcut().register(previous);
@@ -139,12 +440,24 @@ fn restore_shortcut(app: &AppHandle, current: &str, previous: &str) {
 }
 
 #[tauri::command]
-pub fn save_settings(settings: Settings, app: AppHandle, store: State<'_, Store>) -> Result<LauncherState, String> {
+pub fn save_settings(
+    mut settings: Settings,
+    app: AppHandle,
+    store: State<'_, Store>,
+) -> Result<LauncherState, String> {
+    normalize_workspaces(&mut settings)?;
     let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
     let previous_shortcut = data.settings.shortcut.clone();
     let next_shortcut = settings.shortcut.clone();
     let mut next_data = data.clone();
     next_data.settings = settings;
+    if next_data
+        .active_context
+        .as_deref()
+        .is_some_and(|path| normalized_context(path, &next_data.settings).is_err())
+    {
+        next_data.active_context = None;
+    }
     rebuild(&mut next_data)?;
 
     replace_shortcut(&app, &previous_shortcut, &next_shortcut)?;
@@ -160,6 +473,11 @@ pub fn save_settings(settings: Settings, app: AppHandle, store: State<'_, Store>
 }
 
 #[tauri::command]
+pub fn set_auto_hide_suspended(suspended: bool, behavior: State<'_, WindowBehavior>) {
+    behavior.set_auto_hide_suspended(suspended);
+}
+
+#[tauri::command]
 pub fn reindex_workspaces(store: State<'_, Store>) -> Result<LauncherState, String> {
     let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
     rebuild(&mut data)?;
@@ -170,8 +488,72 @@ pub fn reindex_workspaces(store: State<'_, Store>) -> Result<LauncherState, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn rejects_target_outside_workspace() {
-        let settings = Settings { shortcut: String::new(), default_workspace: None, workspaces: vec![] };
+    #[test]
+    fn rejects_target_outside_workspace() {
+        let settings = Settings {
+            shortcut: String::new(),
+            default_workspace: None,
+            workspaces: vec![],
+        };
         assert!(validate_target(Path::new("/tmp"), &settings).is_err());
+    }
+
+    #[test]
+    fn normalizes_and_deduplicates_workspace_paths() {
+        let mut settings = Settings {
+            shortcut: String::new(),
+            default_workspace: None,
+            workspaces: vec![
+                Workspace {
+                    path: "/tmp".into(),
+                    enabled: true,
+                },
+                Workspace {
+                    path: "/private/tmp".into(),
+                    enabled: true,
+                },
+            ],
+        };
+
+        normalize_workspaces(&mut settings).unwrap();
+        assert_eq!(settings.workspaces.len(), 1);
+        assert_eq!(settings.default_workspace, None);
+    }
+
+    #[test]
+    fn code_plain_name_exposes_file_and_directory_actions() {
+        let parsed = parser::parse("code example").unwrap();
+        let actions = candidate_actions(&parsed, Some("example"));
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0].kind, CommandActionKind::OpenFile);
+        assert_eq!(actions[1].kind, CommandActionKind::CreateDirectory);
+    }
+
+    #[test]
+    fn code_explicit_relative_path_does_not_offer_workspace_actions() {
+        let parsed = parser::parse("code ./example").unwrap();
+        assert!(candidate_actions(&parsed, Some("./example")).is_empty());
+    }
+
+    #[test]
+    fn context_must_resolve_inside_an_enabled_workspace() {
+        let settings = Settings {
+            shortcut: String::new(),
+            default_workspace: None,
+            workspaces: vec![Workspace {
+                path: "/tmp".into(),
+                enabled: true,
+            }],
+        };
+        assert!(normalized_context("/tmp", &settings).is_ok());
+
+        let disabled = Settings {
+            workspaces: vec![Workspace {
+                path: "/tmp".into(),
+                enabled: false,
+            }],
+            ..settings
+        };
+        assert!(normalized_context("/tmp", &disabled).is_err());
     }
 }

@@ -1,6 +1,6 @@
 # Development Progress
 
-Last updated: 2026-08-14
+Last updated: 2026-08-17
 
 ## Milestone 0 — Definition
 
@@ -44,6 +44,19 @@ Last updated: 2026-08-14
 - [ ] Validate packaged app permissions and signing configuration.
 - [ ] Document local development, packaging, and troubleshooting.
 
+## Milestone 5 — Context-aware command system
+
+- [x] Define command categories, execution modes, context requirements, path intents, risk levels, and success behaviors.
+- [x] Add the initial Rust command catalog for `ls`, `ll`, `cat`, `code`, `open`, `mkdir`, and `cd`.
+- [x] Replace the workspace textarea with native folder selection and add/remove controls.
+- [x] Add reusable runtime workspace/context selection with a persisted active context.
+- [x] Replace `canCreate` with explicit candidate actions.
+- [x] Resolve plain-name `code` arguments as file-or-directory without silent directory creation.
+- [x] Capture and render structured presentation-command output for `ls`, `ll`, and `cat`.
+- [ ] Implement `cd` as an internal active-context action and `ll` as an explicit alias.
+- [ ] Add individual history deletion without resetting frecency.
+- [ ] Persist resolved action metadata in history.
+
 ## Decision log
 
 - 2026-08-13: Limit MVP to structured executable + arguments; arbitrary shell syntax is out of scope.
@@ -62,3 +75,10 @@ Last updated: 2026-08-14
 - 2026-08-14: Fixed shortcut capture to preserve macOS Command and Control as distinct modifiers instead of collapsing both into `CommandOrControl`.
 - 2026-08-14: Normalized shortcut keys from physical `KeyboardEvent.code` values so macOS Option combinations such as `Alt+1` save as `Alt+1` instead of localized characters such as `¡`.
 - 2026-08-14: Added the explicit Tauri window-hide capability and isolated best-effort UI hiding from command execution errors, preventing a successful command such as `ls -a` from flashing a `window.hide` failure.
+- 2026-08-17: Replaced the mandatory-default-workspace direction with runtime context selection from user-approved workspace roots.
+- 2026-08-17: Defined `code` as file-or-directory and prohibited silently converting a missing target into a directory.
+- 2026-08-17: Started the context-aware command system with a typed Rust command catalog shared by parsing decisions.
+- 2026-08-17: Added native multi-folder workspace selection, pending add/remove controls, Rust path canonicalization/deduplication, and auto-hide suspension while the system picker is open.
+- 2026-08-17: Replaced implicit project creation with explicit `code` actions for opening a file or creating a directory, followed by runtime workspace selection and validated execution.
+- 2026-08-17: Added a reusable workspace picker and persisted active context, cleared invalid context when workspace settings change, and fixed keyboard workspace selection precedence.
+- 2026-08-17: Implemented structured directory and text-file presentation for `ls`, `ll`, and `cat`, including bounded reads, friendly metadata views, interactive navigation, and automatic context selection/retry.

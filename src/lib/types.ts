@@ -28,6 +28,7 @@ export type Settings = {
 
 export type LauncherState = {
   settings: Settings;
+  activeContext: string | null;
   history: HistoryItem[];
   indexedDirectoryCount: number;
 };
@@ -36,6 +37,55 @@ export type QueryResponse = {
   executable: string | null;
   directoryQuery: string | null;
   results: SearchResult[];
+  actions: CommandAction[];
   history: HistoryItem[];
-  canCreate: boolean;
 };
+
+export type CommandActionKind = "open-file" | "create-directory";
+
+export type CommandAction = {
+  id: string;
+  kind: CommandActionKind;
+  label: string;
+  description: string;
+  requiresWorkspace: boolean;
+};
+
+export type PresentationEntryKind = "directory" | "file" | "symlink" | "other";
+
+export type PresentationEntry = {
+  name: string;
+  path: string;
+  kind: PresentationEntryKind;
+  size: number | null;
+  modifiedAt: number | null;
+  hidden: boolean;
+};
+
+export type DirectoryPresentation = {
+  type: "directory";
+  path: string;
+  entries: PresentationEntry[];
+  directoryCount: number;
+  fileCount: number;
+  hiddenCount: number;
+  detailed: boolean;
+  truncated: boolean;
+};
+
+export type TextFilePresentation = {
+  type: "text-file";
+  path: string;
+  name: string;
+  content: string;
+  size: number;
+  lineCount: number;
+  language: string | null;
+};
+
+export type PresentationOutput = DirectoryPresentation | TextFilePresentation;
+
+export type CommandExecution =
+  | { kind: "launched" }
+  | { kind: "needs-context"; message: string }
+  | { kind: "presented"; output: PresentationOutput };

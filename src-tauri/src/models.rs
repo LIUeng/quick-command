@@ -50,13 +50,21 @@ pub struct HistoryItem {
 pub struct AppData {
     pub version: u32,
     pub settings: Settings,
+    #[serde(default)]
+    pub active_context: Option<String>,
     pub directories: Vec<DirectoryRecord>,
     pub history: Vec<HistoryItem>,
 }
 
 impl Default for AppData {
     fn default() -> Self {
-        Self { version: 1, settings: Settings::default(), directories: vec![], history: vec![] }
+        Self {
+            version: 1,
+            settings: Settings::default(),
+            active_context: None,
+            directories: vec![],
+            history: vec![],
+        }
     }
 }
 
@@ -64,6 +72,7 @@ impl Default for AppData {
 #[serde(rename_all = "camelCase")]
 pub struct LauncherState {
     pub settings: Settings,
+    pub active_context: Option<String>,
     pub history: Vec<HistoryItem>,
     pub indexed_directory_count: usize,
 }
@@ -78,14 +87,81 @@ pub struct SearchResult {
     pub use_count: u32,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum CommandActionKind {
+    OpenFile,
+    CreateDirectory,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandAction {
+    pub id: String,
+    pub kind: CommandActionKind,
+    pub label: String,
+    pub description: String,
+    pub requires_workspace: bool,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryResponse {
     pub executable: Option<String>,
     pub directory_query: Option<String>,
     pub results: Vec<SearchResult>,
+    pub actions: Vec<CommandAction>,
     pub history: Vec<HistoryItem>,
-    pub can_create: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum PresentationEntryKind {
+    Directory,
+    File,
+    Symlink,
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationEntry {
+    pub name: String,
+    pub path: String,
+    pub kind: PresentationEntryKind,
+    pub size: Option<u64>,
+    pub modified_at: Option<u64>,
+    pub hidden: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum PresentationOutput {
+    Directory {
+        path: String,
+        entries: Vec<PresentationEntry>,
+        directory_count: usize,
+        file_count: usize,
+        hidden_count: usize,
+        detailed: bool,
+        truncated: bool,
+    },
+    TextFile {
+        path: String,
+        name: String,
+        content: String,
+        size: u64,
+        line_count: usize,
+        language: Option<String>,
+    },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum CommandExecution {
+    Launched,
+    NeedsContext { message: String },
+    Presented { output: PresentationOutput },
 }
 
 #[derive(Debug, Clone)]
