@@ -74,6 +74,7 @@ pub fn run() {
             commands::search_projects,
             commands::execute_command,
             commands::execute_action,
+            commands::confirm_operation,
             commands::set_active_context,
             commands::save_settings,
             commands::reindex_workspaces,

@@ -64,8 +64,10 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 ### Directory creation
 
 - When no project matches, offer directory creation as one explicit action below a user-selected workspace root.
+- `mkdir` resolves exactly one directory under the active context or an explicitly selected workspace and requires confirmation before writing.
 - Show the final absolute path before creation.
 - Reject traversal outside the workspace root.
+- Require the parent directory to exist; recursive `mkdir -p` behavior is outside the initial safe operation flow.
 - Launch only after creation succeeds.
 
 ### History and settings
@@ -107,3 +109,4 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 11. Deleting a history entry persists across restart and does not change directory frecency.
 12. `ls` and `ll` render a structured directory browser, and `cat` renders a bounded text reader without exposing raw terminal output.
 13. `cd` resolves indexed, relative, parent, and absolute directories inside enabled workspaces and updates application context without spawning a process.
+14. `mkdir example` previews the canonical target, creates only after confirmation, and never writes outside an enabled workspace.

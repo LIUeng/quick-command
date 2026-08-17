@@ -85,8 +85,20 @@ export type TextFilePresentation = {
 
 export type PresentationOutput = DirectoryPresentation | TextFilePresentation;
 
+export type OperationKind = "create-directory";
+
+export type OperationConfirmation = {
+  kind: OperationKind;
+  title: string;
+  description: string;
+  targetPath: string;
+  workspacePath: string;
+};
+
 export type CommandExecution =
   | { kind: "launched" }
   | { kind: "needs-context"; message: string }
   | { kind: "context-updated"; path: string }
+  | { kind: "confirmation"; confirmation: OperationConfirmation }
+  | { kind: "operation-completed"; title: string; message: string; path: string }
   | { kind: "presented"; output: PresentationOutput };

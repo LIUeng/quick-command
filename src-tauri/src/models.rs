@@ -94,6 +94,22 @@ pub enum CommandActionKind {
     CreateDirectory,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum OperationKind {
+    CreateDirectory,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationConfirmation {
+    pub kind: OperationKind,
+    pub title: String,
+    pub description: String,
+    pub target_path: String,
+    pub workspace_path: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandAction {
@@ -160,9 +176,23 @@ pub enum PresentationOutput {
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum CommandExecution {
     Launched,
-    NeedsContext { message: String },
-    ContextUpdated { path: String },
-    Presented { output: PresentationOutput },
+    NeedsContext {
+        message: String,
+    },
+    ContextUpdated {
+        path: String,
+    },
+    Confirmation {
+        confirmation: OperationConfirmation,
+    },
+    OperationCompleted {
+        title: String,
+        message: String,
+        path: String,
+    },
+    Presented {
+        output: PresentationOutput,
+    },
 }
 
 #[derive(Debug, Clone)]

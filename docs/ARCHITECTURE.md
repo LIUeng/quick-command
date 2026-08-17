@@ -105,6 +105,15 @@ Command categories are user-facing labels. Runtime behavior is driven by explici
 - Successful navigation persists the new active context, records successful history, and returns a typed UI notice while keeping the launcher visible.
 - Internal commands without a completed safe workflow are rejected instead of falling through to external process spawning.
 
+## Filesystem operation contract
+
+- `mkdir` is a two-phase internal action: preview first, explicit confirmation second.
+- Preview resolves a canonical existing parent and returns the final target and owning workspace without writing to disk.
+- Confirmation reparses the original command and recomputes the target; client-provided paths are accepted only when they exactly match the recomputed plan.
+- The first safe flow creates one directory only. Options and recursive parent creation are rejected.
+- Successful creation updates the in-memory index and history. If state persistence fails, the newly created empty directory is removed as a rollback.
+- The active context remains unchanged after creation, matching normal `mkdir` behavior.
+
 ## Error presentation contract
 
 - Rust owns the boundary between internal failures and user-facing messages.

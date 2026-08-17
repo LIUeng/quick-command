@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CommandActionKind, CommandExecution, LauncherState, QueryResponse, Settings } from "./types";
+import type { CommandActionKind, CommandExecution, LauncherState, OperationKind, QueryResponse, Settings } from "./types";
 
 const inTauri = () => "__TAURI_INTERNALS__" in window;
 
@@ -27,6 +27,10 @@ export async function execute(query: string, targetPath?: string): Promise<Comma
 
 export async function executeAction(query: string, actionKind: CommandActionKind, workspacePath: string): Promise<void> {
   await invoke("execute_action", { query, actionKind, workspacePath });
+}
+
+export async function confirmOperation(query: string, operationKind: OperationKind, targetPath: string): Promise<CommandExecution> {
+  return invoke("confirm_operation", { query, operationKind, targetPath });
 }
 
 export async function setActiveContext(path: string | null): Promise<LauncherState> {

@@ -153,6 +153,105 @@ fn resolve_cd_context(
     normalized_context(&candidate.to_string_lossy(), &data.settings).map(Some)
 }
 
+struct DirectoryCreationPlan {
+    target: std::path::PathBuf,
+    workspace: std::path::PathBuf,
+    name: String,
+}
+
+fn resolve_mkdir_plan(
+    requested: &str,
+    data: &AppData,
+) -> Result<Option<DirectoryCreationPlan>, String> {
+    if requested.is_empty() || requested.starts_with('-') {
+        return Err("请输入有效的目录路径；mkdir 暂不支持命令选项".into());
+    }
+    let candidate = if Path::new(requested).is_absolute() {
+        Path::new(requested).to_path_buf()
+    } else {
+        let Some(context) = data.active_context.as_deref() else {
+            return Ok(None);
+        };
+        Path::new(context).join(requested)
+    };
+    if candidate.exists() {
+        return Err("目标目录已经存在，无需重复创建".into());
+    }
+    let name = candidate
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty() && *value != "." && *value != "..")
+        .ok_or("目录名称无效，请输入明确的目录名称")?
+        .to_string();
+    let parent = candidate.parent().ok_or("无法确定目标目录的父目录")?;
+    let canonical_parent = parent
+        .canonicalize()
+        .map_err(|error| user_error(error, "父目录不存在或无法访问；mkdir 暂不自动创建多级目录"))?;
+    if !canonical_parent.is_dir() {
+        return Err("目标路径的父级不是文件夹".into());
+    }
+    let workspace = data
+        .settings
+        .workspaces
+        .iter()
+        .filter(|workspace| workspace.enabled)
+        .filter_map(|workspace| Path::new(&workspace.path).canonicalize().ok())
+        .filter(|root| canonical_parent.starts_with(root))
+        .max_by_key(|root| root.components().count())
+        .ok_or("目标目录必须位于已启用的工作区中")?;
+    let target = canonical_parent.join(&name);
+    if target.exists() {
+        return Err("目标目录已经存在，无需重复创建".into());
+    }
+    Ok(Some(DirectoryCreationPlan {
+        target,
+        workspace,
+        name,
+    }))
+}
+
+fn apply_mkdir_plan(
+    plan: DirectoryCreationPlan,
+    query: &str,
+    parsed: &ParsedCommand,
+    store: &Store,
+    data: &mut AppData,
+) -> Result<CommandExecution, String> {
+    fs::create_dir(&plan.target)
+        .map_err(|error| user_error(error, "创建目录失败，请检查名称和父目录权限"))?;
+    let target_text = plan.target.to_string_lossy().into_owned();
+    let mut next_data = data.clone();
+    if !next_data
+        .directories
+        .iter()
+        .any(|directory| directory.path == target_text)
+    {
+        next_data.directories.push(DirectoryRecord {
+            path: target_text.clone(),
+            name: plan.name,
+            use_count: 0,
+            last_used_at: None,
+        });
+    }
+    record_success(
+        &mut next_data,
+        query,
+        parsed,
+        vec![target_text.clone()],
+        Some(target_text.clone()),
+    );
+    if let Err(error) = store.save(&next_data) {
+        let _ = fs::remove_dir(&plan.target);
+        return Err(error);
+    }
+    *data = next_data;
+    Ok(CommandExecution::OperationCompleted {
+        title: "目录已创建".into(),
+        message: "目录已加入项目索引，可以继续使用 code 或 cd。".into(),
+        path: target_text,
+    })
+}
+
 fn launch(parsed: &ParsedCommand, target_path: Option<&str>) -> Result<Vec<String>, String> {
     let mut args = parsed.args.clone();
     if let (Some(index), Some(target)) = (parsed.directory_arg_index, target_path) {
@@ -263,6 +362,27 @@ pub fn execute_command(
         store.save(&data)?;
         return Ok(CommandExecution::ContextUpdated { path: next_context });
     }
+    if definition.execution_mode == ExecutionMode::Internal && parsed.executable == "mkdir" {
+        let requested = match parsed.args.as_slice() {
+            [path] => path.as_str(),
+            [] => return Err("请输入要创建的目录名称或路径".into()),
+            _ => return Err("mkdir 当前一次只能创建一个目录".into()),
+        };
+        let Some(plan) = resolve_mkdir_plan(requested, &data)? else {
+            return Ok(CommandExecution::NeedsContext {
+                message: "请选择工作区作为 mkdir 的起始目录".into(),
+            });
+        };
+        return Ok(CommandExecution::Confirmation {
+            confirmation: OperationConfirmation {
+                kind: OperationKind::CreateDirectory,
+                title: format!("创建目录 {}", plan.name),
+                description: "确认后将在所选工作区内创建这个目录。".into(),
+                target_path: plan.target.to_string_lossy().into_owned(),
+                workspace_path: plan.workspace.to_string_lossy().into_owned(),
+            },
+        });
+    }
     if definition.execution_mode == ExecutionMode::Internal {
         return Err(format!(
             "{} 尚未开放，请等待应用内安全确认流程完成",
@@ -281,6 +401,31 @@ pub fn execute_command(
     record_success(&mut data, &query, &parsed, args, target_path);
     store.save(&data)?;
     Ok(CommandExecution::Launched)
+}
+
+#[tauri::command]
+pub fn confirm_operation(
+    query: String,
+    operation_kind: OperationKind,
+    target_path: String,
+    store: State<'_, Store>,
+) -> Result<CommandExecution, String> {
+    let parsed = parser::parse(&query)?;
+    if parsed.executable != "mkdir" || operation_kind != OperationKind::CreateDirectory {
+        return Err("当前确认信息与命令不匹配，请重新执行命令".into());
+    }
+    let requested = match parsed.args.as_slice() {
+        [path] => path.as_str(),
+        _ => return Err("mkdir 当前一次只能创建一个目录".into()),
+    };
+    let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
+    let plan = resolve_mkdir_plan(requested, &data)?
+        .ok_or("活动上下文已变化，请重新选择工作区并执行命令")?;
+    if plan.target != Path::new(&target_path) {
+        return Err("目录目标已变化，请重新确认后再创建".into());
+    }
+
+    apply_mkdir_plan(plan, &query, &parsed, &store, &mut data)
 }
 
 fn selected_workspace(path: &str, settings: &Settings) -> Result<std::path::PathBuf, String> {
@@ -649,6 +794,106 @@ mod tests {
         assert!(resolve_cd_context("..", None, &data).is_err());
         data.active_context = None;
         assert_eq!(resolve_cd_context("child", None, &data).unwrap(), None);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn mkdir_previews_only_targets_inside_existing_workspace_parents() {
+        let root = std::env::temp_dir().join(format!("quick-command-mkdir-{}", Uuid::new_v4()));
+        let child = root.join("child");
+        fs::create_dir_all(&child).unwrap();
+        let mut data = AppData {
+            settings: Settings {
+                shortcut: String::new(),
+                default_workspace: None,
+                workspaces: vec![Workspace {
+                    path: root.to_string_lossy().into_owned(),
+                    enabled: true,
+                }],
+            },
+            active_context: Some(child.to_string_lossy().into_owned()),
+            ..AppData::default()
+        };
+
+        let plan = resolve_mkdir_plan("example", &data).unwrap().unwrap();
+        assert_eq!(plan.target, child.canonicalize().unwrap().join("example"));
+        assert!(resolve_mkdir_plan("nested/missing", &data).is_err());
+        data.active_context = Some(root.to_string_lossy().into_owned());
+        assert!(resolve_mkdir_plan("../outside", &data).is_err());
+        data.active_context = None;
+        assert!(resolve_mkdir_plan("example", &data).unwrap().is_none());
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn mkdir_confirmation_creates_and_records_the_directory() {
+        let root = std::env::temp_dir().join(format!("quick-command-create-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let mut data = AppData {
+            settings: Settings {
+                shortcut: String::new(),
+                default_workspace: None,
+                workspaces: vec![Workspace {
+                    path: root.to_string_lossy().into_owned(),
+                    enabled: true,
+                }],
+            },
+            active_context: Some(root.to_string_lossy().into_owned()),
+            ..AppData::default()
+        };
+        let plan = resolve_mkdir_plan("example", &data).unwrap().unwrap();
+        let target = plan.target.clone();
+        let store = Store {
+            path: root.join("state.json"),
+            data: std::sync::Mutex::new(AppData::default()),
+        };
+        let parsed = parser::parse("mkdir example").unwrap();
+
+        assert!(matches!(
+            apply_mkdir_plan(plan, "mkdir example", &parsed, &store, &mut data).unwrap(),
+            CommandExecution::OperationCompleted { .. }
+        ));
+        assert!(target.is_dir());
+        assert_eq!(data.history.len(), 1);
+        assert!(data
+            .directories
+            .iter()
+            .any(|item| item.path == target.to_string_lossy()));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn mkdir_rolls_back_when_state_persistence_fails() {
+        let root = std::env::temp_dir().join(format!("quick-command-rollback-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let mut data = AppData {
+            settings: Settings {
+                shortcut: String::new(),
+                default_workspace: None,
+                workspaces: vec![Workspace {
+                    path: root.to_string_lossy().into_owned(),
+                    enabled: true,
+                }],
+            },
+            active_context: Some(root.to_string_lossy().into_owned()),
+            ..AppData::default()
+        };
+        let plan = resolve_mkdir_plan("example", &data).unwrap().unwrap();
+        let target = plan.target.clone();
+        let invalid_state_path = root.join("state-dir");
+        fs::create_dir(&invalid_state_path).unwrap();
+        let store = Store {
+            path: invalid_state_path,
+            data: std::sync::Mutex::new(AppData::default()),
+        };
+        let parsed = parser::parse("mkdir example").unwrap();
+
+        assert!(apply_mkdir_plan(plan, "mkdir example", &parsed, &store, &mut data).is_err());
+        assert!(!target.exists());
+        assert!(data.history.is_empty());
 
         fs::remove_dir_all(root).unwrap();
     }
