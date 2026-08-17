@@ -1,6 +1,7 @@
 use crate::{
     command_catalog::{definition_for, ExecutionMode},
     errors::user_error,
+    executable_resolver,
     models::*,
     parser, presentation, search,
     store::Store,
@@ -307,7 +308,8 @@ fn launch(parsed: &ParsedCommand, target_path: Option<&str>) -> Result<Vec<Strin
         }
         args[index] = target.to_string();
     }
-    Command::new(&parsed.executable)
+    let executable = executable_resolver::resolve(&parsed.executable)?;
+    Command::new(executable)
         .args(&args)
         .spawn()
         .map_err(|error| {

@@ -143,7 +143,11 @@ function App() {
           setOperationResult(null);
           setError(null);
         })
-        .catch((reason) => setError(describeError(reason)));
+        .catch((reason) => {
+          setResponse(emptyQuery);
+          setSelected(0);
+          setError(describeError(reason));
+        });
     }, 80);
     return () => window.clearTimeout(timer);
   }, [query]);

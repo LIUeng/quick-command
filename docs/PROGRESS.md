@@ -40,7 +40,7 @@ Last updated: 2026-08-17
 ## Milestone 4 — Release readiness
 
 - [ ] Add integration coverage for main command flows.
-- [ ] Validate macOS GUI `PATH` behavior.
+- [~] Validate macOS GUI `PATH` behavior — deterministic fallback resolution is implemented; packaged-app manual validation remains.
 - [ ] Validate packaged app permissions and signing configuration.
 - [ ] Document local development, packaging, and troubleshooting.
 
@@ -59,6 +59,15 @@ Last updated: 2026-08-17
 - [x] Add individual history deletion without resetting frecency.
 - [x] Persist resolved action metadata in history.
 - [x] Support confirmed multi-level project directory creation for `code`.
+
+## Milestone 6 — Security and release preparation
+
+- [x] Reject commands that are not in the trusted command catalog.
+- [x] Resolve launcher executables without relying on the macOS GUI process `PATH` alone.
+- [ ] Add state corruption recovery and versioned migrations.
+- [ ] Add integration coverage for critical launcher flows.
+- [ ] Complete production bundle, signing, notarization, and CSP validation.
+- [ ] Document packaged-app installation and troubleshooting.
 
 ## Decision log
 
@@ -90,3 +99,4 @@ Last updated: 2026-08-17
 - 2026-08-17: Added persistent single-entry history deletion with hover/focus controls, idempotent backend handling, and tests proving directory frecency remains unchanged.
 - 2026-08-17: Added backward-compatible typed history action metadata across launcher, presentation, navigation, and filesystem operation flows, with concise labels for new and legacy records.
 - 2026-08-17: Added confirmed `code x-pro/test01` project creation with safe relative-path validation, multi-directory preview, symlink-boundary checks, structured VS Code launch, and empty-directory rollback on launch failure.
+- 2026-08-17: Closed raw-command fallthrough and added shell-free macOS executable resolution across inherited PATH, common binary directories, and supported application bundles; packaged-app PATH validation remains pending.

@@ -30,6 +30,7 @@ The frontend does not read directories or launch processes directly.
 - `models`: serializable API and persistence types.
 - `command_catalog`: known command definitions and their execution contracts.
 - `parser`: safe tokenization and unsupported-shell detection.
+- `executable_resolver`: trusted executable lookup across the process `PATH`, common macOS binary directories, and known application bundles.
 - `resolver`: context and file/directory intent resolution (planned).
 - `presentation`: bounded filesystem inspection and typed view models for `ls`, `ll`, and `cat`.
 - `search`: deterministic fuzzy and frecency ranking.
@@ -67,6 +68,10 @@ History is pruned to a reasonable internal cap while the UI returns the latest 3
 ## Execution contract
 
 Input is parsed without a shell. The executable is resolved from the application environment and launched with `std::process::Command::args`. Shell control operators are rejected. For a directory-aware rule, only the designated argument is replaced by the selected absolute path.
+
+The parser rejects executables that are absent from the trusted command catalog. A catalog miss is a terminal validation failure and must not become a raw process launch. Registered external commands are resolved to an executable file before spawning. Resolution checks the inherited GUI `PATH`, user-local binary directories, Homebrew/system directories, and known CLI locations inside supported application bundles. It never evaluates shell startup files or invokes `which`, `sh -c`, or an equivalent shell command.
+
+Executable resolution intentionally does not inspect or log environment contents. A missing executable produces a stable recovery message directing the user to install or enable the application's command-line tool. User-configurable executable paths remain future work.
 
 Before execution, a known command is resolved through this pipeline:
 

@@ -40,6 +40,8 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 - Navigation commands such as `cd` update Quick Command's active context instead of spawning an ineffective child-process shell builtin.
 - Shell aliases such as `ll` are implemented as explicit internal mappings, never through shell evaluation.
 - A command definition declares its execution mode, context requirement, path intent, risk level, and success behavior.
+- Execute only commands registered in the trusted command catalog; unknown executables must never fall through to direct process spawning.
+- Resolve registered launcher commands from the GUI process environment, common macOS executable locations, and known application-bundle CLI paths without invoking a shell.
 
 ### Project discovery
 
@@ -117,3 +119,5 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 14. `mkdir example` previews the canonical target, creates only after confirmation, and never writes outside an enabled workspace.
 15. New successful history entries retain their resolved action type, while history written by older versions continues to load.
 16. `code x-pro/test01` previews and creates all missing directories inside the selected workspace, then opens the final project directory.
+17. An unknown command is rejected before process creation, even when an executable with that name exists on the machine.
+18. A packaged macOS launch can find supported editor CLIs in common installation and application-bundle locations without loading the user's shell profile.

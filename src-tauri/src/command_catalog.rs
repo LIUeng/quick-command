@@ -208,6 +208,12 @@ const DEFINITIONS: &[CommandDefinition] = &[
     },
 ];
 
+pub fn is_known_command(executable: &str) -> bool {
+    DEFINITIONS
+        .iter()
+        .any(|definition| definition.executable == executable)
+}
+
 pub fn definition_for(executable: &str) -> CommandDefinition {
     DEFINITIONS
         .iter()
@@ -253,7 +259,8 @@ mod tests {
     }
 
     #[test]
-    fn unknown_commands_do_not_assume_path_context() {
+    fn unknown_commands_are_not_in_the_trusted_catalog() {
+        assert!(!is_known_command("custom-command"));
         let definition = definition_for("custom-command");
         assert_eq!(definition.category, CommandCategory::Raw);
         assert_eq!(definition.context_requirement, ContextRequirement::None);

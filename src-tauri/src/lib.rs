@@ -1,6 +1,7 @@
 mod command_catalog;
 mod commands;
 mod errors;
+mod executable_resolver;
 mod models;
 mod parser;
 mod presentation;

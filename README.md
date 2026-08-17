@@ -65,6 +65,12 @@ pnpm install
 pnpm tauri dev
 ```
 
+### 支持的命令
+
+Quick Command 只执行内置可信命令目录中的命令，当前包括 `code`、`cursor`、`idea`、`webstorm`、`zed`、`open`、`ls`、`ll`、`cat`、`cd` 和 `mkdir`。未知命令不会作为系统进程直接启动。
+
+从 Finder 或 Dock 启动时，macOS 应用可能无法继承终端的完整 `PATH`。Quick Command 会额外检查 Homebrew、系统常用目录以及受支持编辑器应用包中的 CLI。若仍提示找不到命令，请确认对应应用已安装，并在应用中启用其命令行工具。
+
 ### 开发文档
 
 - Agent 开发约束：[`AGENTS.md`](AGENTS.md)
