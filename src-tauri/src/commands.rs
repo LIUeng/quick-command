@@ -58,6 +58,7 @@ pub fn search_projects(query: String, store: State<'_, Store>) -> Result<QueryRe
         .cloned();
     let results = directory_query
         .as_ref()
+        .filter(|value| is_safe_child_name(value))
         .map(|value| search::rank(value, &data.directories, 20))
         .unwrap_or_default();
     let actions = candidate_actions(&parsed, directory_query.as_deref());
@@ -98,6 +99,7 @@ fn is_safe_child_name(name: &str) -> bool {
     !name.is_empty()
         && name != "."
         && name != ".."
+        && !name.starts_with('-')
         && !name.ends_with('/')
         && Path::new(name).components().count() == 1
 }
@@ -131,6 +133,24 @@ fn normalized_context(path: &str, settings: &Settings) -> Result<String, String>
     }
     validate_target(&target, settings)?;
     Ok(target.to_string_lossy().into_owned())
+}
+
+fn resolve_cd_context(
+    requested: &str,
+    selected_path: Option<&str>,
+    data: &AppData,
+) -> Result<Option<String>, String> {
+    let candidate = if let Some(selected) = selected_path {
+        Path::new(selected).to_path_buf()
+    } else if Path::new(requested).is_absolute() {
+        Path::new(requested).to_path_buf()
+    } else {
+        let Some(context) = data.active_context.as_deref() else {
+            return Ok(None);
+        };
+        Path::new(context).join(requested)
+    };
+    normalized_context(&candidate.to_string_lossy(), &data.settings).map(Some)
 }
 
 fn launch(parsed: &ParsedCommand, target_path: Option<&str>) -> Result<Vec<String>, String> {
@@ -196,7 +216,8 @@ pub fn execute_command(
 ) -> Result<CommandExecution, String> {
     let parsed = parser::parse(&query)?;
     let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
-    if definition_for(&parsed.executable).execution_mode == ExecutionMode::Capture {
+    let definition = definition_for(&parsed.executable);
+    if definition.execution_mode == ExecutionMode::Capture {
         return match presentation::execute(&parsed, &data)? {
             presentation::PresentationResolution::NeedsContext => {
                 Ok(CommandExecution::NeedsContext {
@@ -218,6 +239,35 @@ pub fn execute_command(
                 })
             }
         };
+    }
+    if definition.execution_mode == ExecutionMode::Internal && parsed.executable == "cd" {
+        let requested = match parsed.args.as_slice() {
+            [path] => path.as_str(),
+            [] => return Err("请输入要切换到的目录名称或路径".into()),
+            _ => return Err("cd 一次只能切换到一个目录".into()),
+        };
+        let Some(next_context) = resolve_cd_context(requested, target_path.as_deref(), &data)?
+        else {
+            return Ok(CommandExecution::NeedsContext {
+                message: "请选择工作区作为 cd 的起始目录".into(),
+            });
+        };
+        data.active_context = Some(next_context.clone());
+        record_success(
+            &mut data,
+            &query,
+            &parsed,
+            vec![next_context.clone()],
+            Some(next_context.clone()),
+        );
+        store.save(&data)?;
+        return Ok(CommandExecution::ContextUpdated { path: next_context });
+    }
+    if definition.execution_mode == ExecutionMode::Internal {
+        return Err(format!(
+            "{} 尚未开放，请等待应用内安全确认流程完成",
+            parsed.executable
+        ));
     }
     if let Some(target) = target_path.as_ref() {
         validate_target(Path::new(target), &data.settings)?;
@@ -536,6 +586,15 @@ mod tests {
     }
 
     #[test]
+    fn explicit_paths_are_not_project_search_terms() {
+        assert!(!is_safe_child_name("./example"));
+        assert!(!is_safe_child_name("../example"));
+        assert!(!is_safe_child_name("/tmp/example"));
+        assert!(!is_safe_child_name("-a"));
+        assert!(is_safe_child_name("example"));
+    }
+
+    #[test]
     fn context_must_resolve_inside_an_enabled_workspace() {
         let settings = Settings {
             shortcut: String::new(),
@@ -555,5 +614,42 @@ mod tests {
             ..settings
         };
         assert!(normalized_context("/tmp", &disabled).is_err());
+    }
+
+    #[test]
+    fn cd_resolves_relative_paths_and_rejects_workspace_escape() {
+        let root = std::env::temp_dir().join(format!("quick-command-cd-{}", Uuid::new_v4()));
+        let child = root.join("child");
+        fs::create_dir_all(&child).unwrap();
+        let mut data = AppData {
+            settings: Settings {
+                shortcut: String::new(),
+                default_workspace: None,
+                workspaces: vec![Workspace {
+                    path: root.to_string_lossy().into_owned(),
+                    enabled: true,
+                }],
+            },
+            active_context: Some(root.to_string_lossy().into_owned()),
+            ..AppData::default()
+        };
+        let canonical_root = root.canonicalize().unwrap();
+        let canonical_child = child.canonicalize().unwrap();
+
+        assert_eq!(
+            resolve_cd_context("child", None, &data).unwrap(),
+            Some(canonical_child.to_string_lossy().into_owned())
+        );
+        data.active_context = Some(child.to_string_lossy().into_owned());
+        assert_eq!(
+            resolve_cd_context("..", None, &data).unwrap(),
+            Some(canonical_root.to_string_lossy().into_owned())
+        );
+        data.active_context = Some(root.to_string_lossy().into_owned());
+        assert!(resolve_cd_context("..", None, &data).is_err());
+        data.active_context = None;
+        assert_eq!(resolve_cd_context("child", None, &data).unwrap(), None);
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

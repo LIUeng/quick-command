@@ -53,7 +53,8 @@ Last updated: 2026-08-17
 - [x] Replace `canCreate` with explicit candidate actions.
 - [x] Resolve plain-name `code` arguments as file-or-directory without silent directory creation.
 - [x] Capture and render structured presentation-command output for `ls`, `ll`, and `cat`.
-- [ ] Implement `cd` as an internal active-context action and `ll` as an explicit alias.
+- [x] Implement `cd` as an internal active-context action.
+- [x] Implement `ll` as an explicit structured `ls -al` mapping.
 - [ ] Add individual history deletion without resetting frecency.
 - [ ] Persist resolved action metadata in history.
 
@@ -82,3 +83,4 @@ Last updated: 2026-08-17
 - 2026-08-17: Replaced implicit project creation with explicit `code` actions for opening a file or creating a directory, followed by runtime workspace selection and validated execution.
 - 2026-08-17: Added a reusable workspace picker and persisted active context, cleared invalid context when workspace settings change, and fixed keyboard workspace selection precedence.
 - 2026-08-17: Implemented structured directory and text-file presentation for `ls`, `ll`, and `cat`, including bounded reads, friendly metadata views, interactive navigation, and automatic context selection/retry.
+- 2026-08-17: Implemented `cd` as an internal context update with indexed and explicit path resolution, workspace-bound parent traversal, typed success feedback, and rejection of unfinished internal command fallthrough.

@@ -106,3 +106,4 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 10. Deleting a workspace removes its index entries but does not delete local files or history.
 11. Deleting a history entry persists across restart and does not change directory frecency.
 12. `ls` and `ll` render a structured directory browser, and `cat` renders a bounded text reader without exposing raw terminal output.
+13. `cd` resolves indexed, relative, parent, and absolute directories inside enabled workspaces and updates application context without spawning a process.

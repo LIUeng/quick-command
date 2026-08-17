@@ -88,4 +88,5 @@ export type PresentationOutput = DirectoryPresentation | TextFilePresentation;
 export type CommandExecution =
   | { kind: "launched" }
   | { kind: "needs-context"; message: string }
+  | { kind: "context-updated"; path: string }
   | { kind: "presented"; output: PresentationOutput };

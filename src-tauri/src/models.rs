@@ -161,6 +161,7 @@ pub enum PresentationOutput {
 pub enum CommandExecution {
     Launched,
     NeedsContext { message: String },
+    ContextUpdated { path: String },
     Presented { output: PresentationOutput },
 }
 

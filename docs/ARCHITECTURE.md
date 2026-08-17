@@ -96,6 +96,15 @@ Command categories are user-facing labels. Runtime behavior is driven by explici
 - Removing a workspace rebuilds directory indexes but never deletes files or history.
 - Workspace paths returned from the native picker are canonicalized and deduplicated by Rust before persistence.
 
+## Navigation contract
+
+- `cd` is an internal application action and never spawns a shell builtin or child process.
+- A selected indexed result supplies an already resolved directory; explicit absolute and relative paths are canonicalized before use.
+- Relative paths resolve from the active context. If none exists, the command returns a typed context request and resumes after workspace selection.
+- Parent traversal is allowed only while the canonical result remains inside an enabled workspace.
+- Successful navigation persists the new active context, records successful history, and returns a typed UI notice while keeping the launcher visible.
+- Internal commands without a completed safe workflow are rejected instead of falling through to external process spawning.
+
 ## Error presentation contract
 
 - Rust owns the boundary between internal failures and user-facing messages.

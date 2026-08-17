@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { execute, executeAction, loadState, saveSettings, search, setActiveContext } from "./lib/api";
 import type { CommandAction, CommandExecution, LauncherState, PresentationEntry, PresentationOutput, QueryResponse, SearchResult, Settings, Workspace } from "./lib/types";
 import { PresentationView } from "./components/PresentationView";
+import { ContextUpdateView } from "./components/ContextUpdateView";
 import { WorkspaceList } from "./components/WorkspaceList";
 import { WorkspacePicker } from "./components/WorkspacePicker";
 
@@ -105,6 +106,7 @@ function App() {
   const [contextPickerOpen, setContextPickerOpen] = useState(false);
   const [pendingContextQuery, setPendingContextQuery] = useState<string | null>(null);
   const [presentation, setPresentation] = useState<PresentationOutput | null>(null);
+  const [contextUpdate, setContextUpdate] = useState<string | null>(null);
 
   useEffect(() => {
     loadState().then(setState).catch((reason) => setError(describeError(reason)));
@@ -121,6 +123,7 @@ function App() {
           setContextPickerOpen(false);
           setPendingContextQuery(null);
           setPresentation(null);
+          setContextUpdate(null);
           setError(null);
         })
         .catch((reason) => setError(describeError(reason)));
@@ -132,7 +135,7 @@ function App() {
   const choices = response.results;
   const enabledWorkspaces = state?.settings.workspaces.filter((workspace) => workspace.enabled) ?? [];
   const choosingWorkspace = pendingAction !== null || contextPickerOpen || pendingContextQuery !== null;
-  const selectionCount = choosingWorkspace ? enabledWorkspaces.length : presentation ? 0 : choices.length + response.actions.length;
+  const selectionCount = choosingWorkspace ? enabledWorkspaces.length : presentation || contextUpdate ? 0 : choices.length + response.actions.length;
 
   async function applyExecutionResult(command: string, result: CommandExecution) {
     if (result.kind === "needs-context") {
@@ -141,6 +144,7 @@ function App() {
         return;
       }
       setPendingContextQuery(command);
+      setContextUpdate(null);
       setSelected(0);
       setError(null);
       return;
@@ -148,11 +152,19 @@ function App() {
     setState(await loadState());
     if (result.kind === "presented") {
       setPresentation(result.output);
+      setContextUpdate(null);
+      setPendingContextQuery(null);
+      return;
+    }
+    if (result.kind === "context-updated") {
+      setPresentation(null);
+      setContextUpdate(result.path);
       setPendingContextQuery(null);
       return;
     }
     setQuery("");
     setPresentation(null);
+    setContextUpdate(null);
     await hideLauncher();
   }
 
@@ -179,6 +191,7 @@ function App() {
       setQuery("");
       setPendingAction(null);
       setPresentation(null);
+      setContextUpdate(null);
       setState(await loadState());
       await hideLauncher();
     } catch (reason) {
@@ -233,6 +246,7 @@ function App() {
       else if (contextPickerOpen) { setContextPickerOpen(false); setSelected(0); }
       else if (settingsOpen) setSettingsOpen(false);
       else if (presentation) setPresentation(null);
+      else if (contextUpdate) setContextUpdate(null);
       else void hideLauncher();
     }
   }
@@ -250,7 +264,7 @@ function App() {
           <input
             ref={inputRef}
             value={query}
-            onChange={(event) => { setPresentation(null); setQuery(event.target.value); }}
+            onChange={(event) => { setPresentation(null); setContextUpdate(null); setQuery(event.target.value); }}
             onKeyDown={onKeyDown}
             className="min-w-0 flex-1 cursor-text bg-transparent text-lg outline-none placeholder:text-zinc-600"
             placeholder="输入命令，例如 code example"
@@ -262,10 +276,10 @@ function App() {
           </button>
         </div>
 
-        <div className={`min-h-0 flex-1 p-2 ${presentation ? "overflow-hidden" : "overflow-y-auto"}`}>
+        <div className={`min-h-0 flex-1 p-2 ${presentation || contextUpdate ? "overflow-hidden" : "overflow-y-auto"}`}>
           {error && <div className="m-2 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</div>}
 
-          {query.trim() !== "" && !choosingWorkspace && !presentation && choices.map((item, index) => (
+          {query.trim() !== "" && !choosingWorkspace && !presentation && !contextUpdate && choices.map((item, index) => (
             <button key={item.path} className={`result-row ${selected === index ? "result-row-active" : ""}`} onClick={() => void run(item)}>
               <Folder className="h-5 w-5 shrink-0 text-indigo-400" />
               <span className="min-w-0 flex-1 text-left">
@@ -276,7 +290,7 @@ function App() {
             </button>
           ))}
 
-          {query.trim() !== "" && !choosingWorkspace && !presentation && response.actions.map((action, actionIndex) => {
+          {query.trim() !== "" && !choosingWorkspace && !presentation && !contextUpdate && response.actions.map((action, actionIndex) => {
             const index = choices.length + actionIndex;
             const ActionIcon = action.kind === "open-file" ? FilePlus2 : FolderPlus;
             return <button key={action.id} className={`result-row ${selected === index ? "result-row-active" : ""}`} onClick={() => {
@@ -300,7 +314,9 @@ function App() {
             setQuery(nextQuery);
           }} />}
 
-          {query.trim() === "" && !choosingWorkspace && !presentation && (
+          {contextUpdate && !choosingWorkspace && <ContextUpdateView path={contextUpdate} onClose={() => setContextUpdate(null)} />}
+
+          {query.trim() === "" && !choosingWorkspace && !presentation && !contextUpdate && (
             <>
               <div className="flex items-center justify-between px-3 pb-2 pt-1 text-xs uppercase tracking-widest text-zinc-600">
                 <span>最近使用</span><span>{state.indexedDirectoryCount} 个项目已索引</span>
@@ -319,7 +335,7 @@ function App() {
         <footer className="flex items-center justify-between border-t border-white/10 px-5 py-3 text-xs text-zinc-600">
           <button className="flex min-w-0 items-center gap-2 hover:text-zinc-300" onClick={() => {
             if (!enabledWorkspaces.length) setError("请先在设置中添加工作区");
-            else { setContextPickerOpen(true); setPendingAction(null); setPendingContextQuery(null); setPresentation(null); setSelected(0); }
+            else { setContextPickerOpen(true); setPendingAction(null); setPendingContextQuery(null); setPresentation(null); setContextUpdate(null); setSelected(0); }
           }} title={state.activeContext ?? "选择活动上下文"}>
             <Folder className="h-3.5 w-3.5 shrink-0" />
             <span className="max-w-52 truncate">{state.activeContext?.split("/").pop() ?? "选择上下文"}</span>
