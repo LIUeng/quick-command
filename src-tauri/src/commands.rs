@@ -259,6 +259,7 @@ fn apply_mkdir_plan(
         parsed,
         vec![target_text.clone()],
         Some(target_text.clone()),
+        HistoryActionKind::CreateDirectory,
     );
     if let Err(error) = store.save(&next_data) {
         let _ = fs::remove_dir(&plan.target);
@@ -301,6 +302,7 @@ fn record_success(
     parsed: &ParsedCommand,
     args: Vec<String>,
     target_path: Option<String>,
+    action_kind: HistoryActionKind,
 ) {
     let timestamp = now();
     if let Some(target) = target_path.as_ref() {
@@ -321,6 +323,7 @@ fn record_success(
             executable: parsed.executable.clone(),
             args,
             target_path,
+            action: Some(HistoryAction { kind: action_kind }),
             executed_at: timestamp,
         },
     );
@@ -344,6 +347,10 @@ pub fn execute_command(
                 })
             }
             presentation::PresentationResolution::Ready(result) => {
+                let action_kind = match &result.output {
+                    PresentationOutput::Directory { .. } => HistoryActionKind::ListDirectory,
+                    PresentationOutput::TextFile { .. } => HistoryActionKind::ReadTextFile,
+                };
                 data.active_context = result.active_context;
                 record_success(
                     &mut data,
@@ -351,6 +358,7 @@ pub fn execute_command(
                     &parsed,
                     result.effective_args,
                     Some(result.target_path),
+                    action_kind,
                 );
                 store.save(&data)?;
                 Ok(CommandExecution::Presented {
@@ -378,6 +386,7 @@ pub fn execute_command(
             &parsed,
             vec![next_context.clone()],
             Some(next_context.clone()),
+            HistoryActionKind::ChangeContext,
         );
         store.save(&data)?;
         return Ok(CommandExecution::ContextUpdated { path: next_context });
@@ -418,7 +427,12 @@ pub fn execute_command(
             data.active_context = Some(normalized_context(target, &data.settings)?);
         }
     }
-    record_success(&mut data, &query, &parsed, args, target_path);
+    let action_kind = if target_path.is_some() {
+        HistoryActionKind::OpenProject
+    } else {
+        HistoryActionKind::LaunchCommand
+    };
+    record_success(&mut data, &query, &parsed, args, target_path, action_kind);
     store.save(&data)?;
     Ok(CommandExecution::Launched)
 }
@@ -522,7 +536,18 @@ pub fn execute_action(
         CommandActionKind::OpenFile => root_path.to_string_lossy().into_owned(),
         CommandActionKind::CreateDirectory => target_text.clone(),
     });
-    record_success(&mut data, &query, &parsed, args, Some(target_text));
+    let history_action = match action_kind {
+        CommandActionKind::OpenFile => HistoryActionKind::OpenFile,
+        CommandActionKind::CreateDirectory => HistoryActionKind::CreateDirectoryAndOpen,
+    };
+    record_success(
+        &mut data,
+        &query,
+        &parsed,
+        args,
+        Some(target_text),
+        history_action,
+    );
     store.save(&data)
 }
 
@@ -877,6 +902,10 @@ mod tests {
         ));
         assert!(target.is_dir());
         assert_eq!(data.history.len(), 1);
+        assert_eq!(
+            data.history[0].action.as_ref().map(|action| action.kind),
+            Some(HistoryActionKind::CreateDirectory)
+        );
         assert!(data
             .directories
             .iter()
@@ -934,6 +963,7 @@ mod tests {
                     executable: "code".into(),
                     args: vec!["/tmp/example".into()],
                     target_path: Some("/tmp/example".into()),
+                    action: None,
                     executed_at: 42,
                 },
                 HistoryItem {
@@ -942,6 +972,7 @@ mod tests {
                     executable: "ls".into(),
                     args: vec!["/tmp".into()],
                     target_path: Some("/tmp".into()),
+                    action: None,
                     executed_at: 41,
                 },
             ],

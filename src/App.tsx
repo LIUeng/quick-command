@@ -2,7 +2,7 @@ import { FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMous
 import { Clock3, Command, FilePlus2, Folder, FolderPlus, Keyboard, LoaderCircle, Search, Settings2, Trash2 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirmOperation, deleteHistoryItem, execute, executeAction, loadState, saveSettings, search, setActiveContext } from "./lib/api";
-import type { CommandAction, CommandExecution, LauncherState, OperationConfirmation, PresentationEntry, PresentationOutput, QueryResponse, SearchResult, Settings, Workspace } from "./lib/types";
+import type { CommandAction, CommandExecution, HistoryActionKind, LauncherState, OperationConfirmation, PresentationEntry, PresentationOutput, QueryResponse, SearchResult, Settings, Workspace } from "./lib/types";
 import { PresentationView } from "./components/PresentationView";
 import { ContextUpdateView } from "./components/ContextUpdateView";
 import { OperationCompletedView, OperationConfirmationView } from "./components/OperationView";
@@ -93,6 +93,17 @@ function shortcutParts(shortcut: string) {
 function ShortcutKeys({ shortcut }: { shortcut: string }) {
   return <span className="inline-flex items-center gap-1" aria-label={shortcut}>{shortcutParts(shortcut).map((part, index) => <kbd className="keycap" key={`${part}-${index}`}>{part}</kbd>)}</span>;
 }
+
+const historyActionLabels: Record<HistoryActionKind, string> = {
+  "launch-command": "运行命令",
+  "open-project": "打开项目",
+  "open-file": "打开文件",
+  "create-directory-and-open": "创建并打开",
+  "list-directory": "查看目录",
+  "read-text-file": "查看文件",
+  "change-context": "切换上下文",
+  "create-directory": "创建目录",
+};
 
 function App() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -392,7 +403,10 @@ function App() {
                 <div key={item.id} className="group flex items-center rounded-xl transition hover:bg-white/5">
                   <button className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-zinc-300" onClick={() => setQuery(item.displayText)}>
                     <Clock3 className="h-5 w-5 shrink-0 text-zinc-500" />
-                    <span className="min-w-0 flex-1 truncate text-left">{item.displayText}</span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block truncate">{item.displayText}</span>
+                      <span className="mt-0.5 block truncate text-[11px] text-zinc-600">{item.action ? historyActionLabels[item.action.kind] : "旧版记录"}</span>
+                    </span>
                     <span className="max-w-56 truncate text-xs text-zinc-600">{item.targetPath}</span>
                   </button>
                   <button className="icon-button mr-2 opacity-0 group-hover:opacity-100 focus:opacity-100" onClick={() => void removeHistory(item.id)} disabled={deletingHistoryId !== null} aria-label={`删除历史记录 ${item.displayText}`} title="删除这条历史，不影响项目排序权重">

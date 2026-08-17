@@ -73,6 +73,7 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 ### History and settings
 
 - Display the latest 30 successful commands when the query is empty.
+- Persist the resolved action type for new history entries so the UI can distinguish launches, presentation, navigation, and filesystem operations.
 - Persist workspace roots, command rules, global shortcut, history, and directory weights.
 - Allow editing the shortcut and managing workspace roots through a native folder picker.
 - Allow adding and removing workspace roots without deleting local files.
@@ -110,3 +111,4 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 12. `ls` and `ll` render a structured directory browser, and `cat` renders a bounded text reader without exposing raw terminal output.
 13. `cd` resolves indexed, relative, parent, and absolute directories inside enabled workspaces and updates application context without spawning a process.
 14. `mkdir example` previews the canonical target, creates only after confirmation, and never writes outside an enabled workspace.
+15. New successful history entries retain their resolved action type, while history written by older versions continues to load.

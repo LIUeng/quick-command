@@ -34,6 +34,25 @@ pub struct DirectoryRecord {
     pub last_used_at: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum HistoryActionKind {
+    LaunchCommand,
+    OpenProject,
+    OpenFile,
+    CreateDirectoryAndOpen,
+    ListDirectory,
+    ReadTextFile,
+    ChangeContext,
+    CreateDirectory,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryAction {
+    pub kind: HistoryActionKind,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryItem {
@@ -42,6 +61,8 @@ pub struct HistoryItem {
     pub executable: String,
     pub args: Vec<String>,
     pub target_path: Option<String>,
+    #[serde(default)]
+    pub action: Option<HistoryAction>,
     pub executed_at: u64,
 }
 
@@ -193,6 +214,25 @@ pub enum CommandExecution {
     Presented {
         output: PresentationOutput,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_history_without_action_metadata_still_loads() {
+        let json = r#"{
+            "id":"legacy",
+            "displayText":"code example",
+            "executable":"code",
+            "args":["example"],
+            "targetPath":null,
+            "executedAt":1
+        }"#;
+        let item: HistoryItem = serde_json::from_str(json).unwrap();
+        assert_eq!(item.action, None);
+    }
 }
 
 #[derive(Debug, Clone)]

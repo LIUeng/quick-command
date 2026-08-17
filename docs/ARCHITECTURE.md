@@ -56,6 +56,14 @@ History is pruned to a reasonable internal cap while the UI returns the latest 3
 - The backend persists a cloned next state before replacing in-memory data, so a save failure leaves the current state intact.
 - Repeating deletion for an already removed identifier is treated as an idempotent success.
 
+## History action metadata contract
+
+- Each newly recorded success stores a typed action kind in addition to its display command, effective arguments, and resolved target.
+- Initial action kinds distinguish generic launch, project open, file open, create-and-open, directory listing, text reading, context navigation, and directory creation.
+- The action field is optional during deserialization so existing version-1 JSON state remains readable without an eager migration.
+- The UI derives short localized labels from the stable action kind and labels entries without metadata as legacy records.
+- Action metadata records classification only; it does not duplicate file contents or add complete environment information.
+
 ## Execution contract
 
 Input is parsed without a shell. The executable is resolved from the application environment and launched with `std::process::Command::args`. Shell control operators are rejected. For a directory-aware rule, only the designated argument is replaced by the selected absolute path.

@@ -12,7 +12,22 @@ export type HistoryItem = {
   executable: string;
   args: string[];
   targetPath: string | null;
+  action: HistoryAction | null;
   executedAt: number;
+};
+
+export type HistoryActionKind =
+  | "launch-command"
+  | "open-project"
+  | "open-file"
+  | "create-directory-and-open"
+  | "list-directory"
+  | "read-text-file"
+  | "change-context"
+  | "create-directory";
+
+export type HistoryAction = {
+  kind: HistoryActionKind;
 };
 
 export type Workspace = {
