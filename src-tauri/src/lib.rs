@@ -71,6 +71,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_launcher_state,
+            commands::delete_history_item,
             commands::search_projects,
             commands::execute_command,
             commands::execute_action,

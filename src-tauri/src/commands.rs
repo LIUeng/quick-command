@@ -39,6 +39,26 @@ pub fn get_launcher_state(store: State<'_, Store>) -> Result<LauncherState, Stri
     Ok(snapshot(&data))
 }
 
+fn remove_history_item(data: &mut AppData, history_id: &str) -> bool {
+    let previous_len = data.history.len();
+    data.history.retain(|item| item.id != history_id);
+    data.history.len() != previous_len
+}
+
+#[tauri::command]
+pub fn delete_history_item(
+    history_id: String,
+    store: State<'_, Store>,
+) -> Result<LauncherState, String> {
+    let mut data = store.data.lock().map_err(|_| "无法更新应用状态")?;
+    let mut next_data = data.clone();
+    if remove_history_item(&mut next_data, &history_id) {
+        store.save(&next_data)?;
+        *data = next_data;
+    }
+    Ok(snapshot(&data))
+}
+
 #[tauri::command]
 pub fn search_projects(query: String, store: State<'_, Store>) -> Result<QueryResponse, String> {
     let data = store.data.lock().map_err(|_| "无法读取应用状态")?;
@@ -896,5 +916,43 @@ mod tests {
         assert!(data.history.is_empty());
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn deleting_history_preserves_directory_frecency() {
+        let mut data = AppData {
+            directories: vec![DirectoryRecord {
+                path: "/tmp/example".into(),
+                name: "example".into(),
+                use_count: 7,
+                last_used_at: Some(42),
+            }],
+            history: vec![
+                HistoryItem {
+                    id: "remove".into(),
+                    display_text: "code example".into(),
+                    executable: "code".into(),
+                    args: vec!["/tmp/example".into()],
+                    target_path: Some("/tmp/example".into()),
+                    executed_at: 42,
+                },
+                HistoryItem {
+                    id: "keep".into(),
+                    display_text: "ls".into(),
+                    executable: "ls".into(),
+                    args: vec!["/tmp".into()],
+                    target_path: Some("/tmp".into()),
+                    executed_at: 41,
+                },
+            ],
+            ..AppData::default()
+        };
+
+        assert!(remove_history_item(&mut data, "remove"));
+        assert_eq!(data.history.len(), 1);
+        assert_eq!(data.history[0].id, "keep");
+        assert_eq!(data.directories[0].use_count, 7);
+        assert_eq!(data.directories[0].last_used_at, Some(42));
+        assert!(!remove_history_item(&mut data, "missing"));
     }
 }

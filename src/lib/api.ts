@@ -14,6 +14,10 @@ export async function loadState(): Promise<LauncherState> {
   return inTauri() ? invoke("get_launcher_state") : demoState;
 }
 
+export async function deleteHistoryItem(historyId: string): Promise<LauncherState> {
+  return invoke("delete_history_item", { historyId });
+}
+
 export async function search(query: string): Promise<QueryResponse> {
   if (!inTauri()) {
     return { executable: null, directoryQuery: null, results: [], actions: [], history: [] };

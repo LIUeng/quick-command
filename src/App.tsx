@@ -1,7 +1,7 @@
 import { FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
-import { Clock3, Command, FilePlus2, Folder, FolderPlus, Keyboard, LoaderCircle, Search, Settings2 } from "lucide-react";
+import { Clock3, Command, FilePlus2, Folder, FolderPlus, Keyboard, LoaderCircle, Search, Settings2, Trash2 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { confirmOperation, execute, executeAction, loadState, saveSettings, search, setActiveContext } from "./lib/api";
+import { confirmOperation, deleteHistoryItem, execute, executeAction, loadState, saveSettings, search, setActiveContext } from "./lib/api";
 import type { CommandAction, CommandExecution, LauncherState, OperationConfirmation, PresentationEntry, PresentationOutput, QueryResponse, SearchResult, Settings, Workspace } from "./lib/types";
 import { PresentationView } from "./components/PresentationView";
 import { ContextUpdateView } from "./components/ContextUpdateView";
@@ -110,6 +110,7 @@ function App() {
   const [contextUpdate, setContextUpdate] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<OperationConfirmation | null>(null);
   const [operationResult, setOperationResult] = useState<{ title: string; message: string; path: string } | null>(null);
+  const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null);
 
   useEffect(() => {
     loadState().then(setState).catch((reason) => setError(describeError(reason)));
@@ -266,6 +267,20 @@ function App() {
     }
   }
 
+  async function removeHistory(historyId: string) {
+    if (deletingHistoryId) return;
+    setDeletingHistoryId(historyId);
+    setError(null);
+    try {
+      setState(await deleteHistoryItem(historyId));
+    } catch (reason) {
+      setError(describeError(reason));
+    } finally {
+      setDeletingHistoryId(null);
+      inputRef.current?.focus();
+    }
+  }
+
   function onKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown" && selectionCount) {
       event.preventDefault();
@@ -374,11 +389,16 @@ function App() {
                 <span>最近使用</span><span>{state.indexedDirectoryCount} 个项目已索引</span>
               </div>
               {visibleHistory.length ? visibleHistory.map((item) => (
-                <button key={item.id} className="result-row" onClick={() => setQuery(item.displayText)}>
-                  <Clock3 className="h-5 w-5 text-zinc-500" />
-                  <span className="min-w-0 flex-1 truncate text-left">{item.displayText}</span>
-                  <span className="truncate text-xs text-zinc-600">{item.targetPath}</span>
-                </button>
+                <div key={item.id} className="group flex items-center rounded-xl transition hover:bg-white/5">
+                  <button className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-zinc-300" onClick={() => setQuery(item.displayText)}>
+                    <Clock3 className="h-5 w-5 shrink-0 text-zinc-500" />
+                    <span className="min-w-0 flex-1 truncate text-left">{item.displayText}</span>
+                    <span className="max-w-56 truncate text-xs text-zinc-600">{item.targetPath}</span>
+                  </button>
+                  <button className="icon-button mr-2 opacity-0 group-hover:opacity-100 focus:opacity-100" onClick={() => void removeHistory(item.id)} disabled={deletingHistoryId !== null} aria-label={`删除历史记录 ${item.displayText}`} title="删除这条历史，不影响项目排序权重">
+                    {deletingHistoryId === item.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </button>
+                </div>
               )) : <EmptyState />}
             </>
           )}

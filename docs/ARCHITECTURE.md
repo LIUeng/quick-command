@@ -49,6 +49,13 @@ The MVP state contains:
 
 History is pruned to a reasonable internal cap while the UI returns the latest 30 entries.
 
+## History deletion contract
+
+- Each visible successful-history entry has a stable identifier and can be deleted independently.
+- Deletion removes only the matching history item; directory use counts, last-used timestamps, indexes, settings, and local files remain unchanged.
+- The backend persists a cloned next state before replacing in-memory data, so a save failure leaves the current state intact.
+- Repeating deletion for an already removed identifier is treated as an idempotent success.
+
 ## Execution contract
 
 Input is parsed without a shell. The executable is resolved from the application environment and launched with `std::process::Command::args`. Shell control operators are rejected. For a directory-aware rule, only the designated argument is replaced by the selected absolute path.
