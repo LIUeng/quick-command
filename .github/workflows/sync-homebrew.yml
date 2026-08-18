@@ -1,0 +1,62 @@
+name: Sync Homebrew Cask
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  update-cask:
+    runs-on: macos-latest
+    steps:
+      - name: Check out Quick Command
+        uses: actions/checkout@v4
+
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: LIUeng/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Download release DMG
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/quick-command-release"
+          gh release download "$RELEASE_TAG" --pattern "*.dmg" --dir "$RUNNER_TEMP/quick-command-release"
+          DMG_COUNT=$(find "$RUNNER_TEMP/quick-command-release" -maxdepth 1 -type f -name "*.dmg" | wc -l | tr -d ' ')
+          test "$DMG_COUNT" = "1" || { echo "Expected exactly one DMG asset, found $DMG_COUNT"; exit 1; }
+          DMG_PATH=$(find "$RUNNER_TEMP/quick-command-release" -maxdepth 1 -type f -name "*.dmg" -print -quit)
+          DMG_NAME=$(basename "$DMG_PATH")
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "url=https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${DMG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Render and validate Cask
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+          RELEASE_SHA256: ${{ steps.release.outputs.sha256 }}
+        run: |
+          node scripts/render-homebrew-cask.mjs --version "$RELEASE_VERSION" --url "$RELEASE_URL" --sha256 "$RELEASE_SHA256" --output homebrew-tap/Casks/quick-command.rb
+          ruby -c homebrew-tap/Casks/quick-command.rb
+
+      - name: Commit Cask update
+        working-directory: homebrew-tap
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/quick-command.rb
+          if git diff --cached --quiet; then
+            echo "Cask already matches Quick Command ${RELEASE_VERSION}."
+            exit 0
+          fi
+          git commit -m "chore(cask): update quick-command to ${RELEASE_VERSION}"
+          git push

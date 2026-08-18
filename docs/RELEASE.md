@@ -117,6 +117,28 @@ Application updates cannot be fully validated from `pnpm tauri dev`. Test with t
 
 Until Developer ID signing and notarization are enabled, also confirm the manual macOS approval experience for the updated application.
 
+## Homebrew Cask distribution
+
+Quick Command uses Homebrew for first installation and keeps Tauri Updater as the in-app update mechanism. The Cask declares `auto_updates true`; the application never invokes `brew`, a shell, or a downloaded installation script.
+
+Create a fine-grained GitHub personal access token that can write repository contents only in `LIUeng/homebrew-tap`, then save it in the Quick Command repository as the Actions secret `HOMEBREW_TAP_TOKEN`. Do not reuse the updater signing key or store the token in either repository.
+
+When a GitHub Release is published, `.github/workflows/sync-homebrew.yml`:
+
+1. Downloads the single DMG asset from that release.
+2. Calculates its SHA256.
+3. Renders `Casks/quick-command.rb` with the exact versioned URL.
+4. Validates the Ruby syntax.
+5. Commits the Cask update to `LIUeng/homebrew-tap`.
+
+The first Cask cannot be generated until a Release with a public DMG has been published. After the tap is public and contains the generated Cask, users install with:
+
+```bash
+brew install --cask LIUeng/tap/quick-command
+```
+
+Homebrew installation does not replace packaged-app validation. Until Apple signing and notarization are enabled, users may still need to approve Quick Command in macOS Privacy & Security after installation.
+
 ## Troubleshooting
 
 ### Editor command not found

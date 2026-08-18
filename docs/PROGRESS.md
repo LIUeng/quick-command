@@ -80,6 +80,7 @@ Last updated: 2026-08-18
 - [x] Verify and correct the tag-to-project version check in GitHub Actions.
 - [x] Add one-command synchronization for all release version files.
 - [x] Inject and validate the updater public key in the Tauri release configuration.
+- [x] Add Homebrew Cask generation and cross-repository synchronization through `LIUeng/homebrew-tap`; first public Cask awaits a published DMG Release.
 - [ ] Validate an upgrade between two packaged macOS versions.
 
 ## Decision log
@@ -121,3 +122,4 @@ Last updated: 2026-08-18
 - 2026-08-18: Corrected the release version checker to ignore pnpm's forwarded `--` argument so semantic-version tags are compared with the project version instead of the argument separator.
 - 2026-08-18: Added `pnpm version:set <major.minor.patch>` to validate and synchronize the frontend, Cargo, Tauri, and lockfile release versions before tagging.
 - 2026-08-18: Fixed updater artifact builds by validating the generated `.pub` Base64 and writing it into an ignored Tauri release configuration before the GitHub Actions build.
+- 2026-08-18: Added a Homebrew Cask renderer, Release-published synchronization workflow, personal tap documentation, and Cask audit automation while retaining Tauri Updater as the application update channel.
