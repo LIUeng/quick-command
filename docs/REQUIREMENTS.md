@@ -89,6 +89,15 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 - Preserve malformed state files for manual recovery, restore the latest valid backup when possible, and show a startup notice describing the recovery result.
 - Refuse to overwrite state created by a newer unsupported application-data version.
 
+### Software updates
+
+- Show the installed application version in Settings.
+- Check for updates only after an explicit user action; background or silent checks are outside the initial flow.
+- Present the available version and release notes before downloading.
+- Download and install only updater artifacts whose Tauri signature matches the public key embedded in the release build.
+- Show download progress and relaunch the application after a successful installation.
+- Keep updater signing private keys and passwords outside source control.
+
 ## Non-functional requirements
 
 - Typical local search should feel immediate, targeting under 200 ms.

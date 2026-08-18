@@ -60,6 +60,16 @@ History is pruned to a reasonable internal cap while the UI returns the latest 3
 - Recovery results are transient runtime notices and are not persisted back into application data.
 - State with a version newer than the running application is rejected without rewriting the primary or backup.
 
+## Application update contract
+
+- The Settings UI owns transient checking, availability, download-progress, and error presentation state.
+- Tauri's updater plugin performs HTTPS metadata retrieval, signed artifact verification, download, and installation; the process plugin performs the final relaunch.
+- Update checks are user-triggered. Opening Quick Command never downloads or installs an update in the background.
+- Release builds inject `QUICK_COMMAND_UPDATER_PUBKEY` at compile time. Builds without a non-empty public key expose the installed version but disable update checks with a stable explanation.
+- The metadata endpoint is `https://github.com/LIUeng/quick-command/releases/latest/download/latest.json`.
+- GitHub Actions creates universal macOS updater artifacts and a draft GitHub Release from a semantic-version tag. Publishing the draft makes that version visible to installed clients.
+- Tauri updater signatures provide artifact integrity and are required independently of Apple Developer ID signing or notarization.
+
 ## History deletion contract
 
 - Each visible successful-history entry has a stable identifier and can be deleted independently.

@@ -72,6 +72,13 @@ Last updated: 2026-08-18
 - [ ] Validate signing, notarization, Gatekeeper, and packaged native integrations with release credentials.
 - [ ] Document packaged-app installation and troubleshooting.
 
+## Milestone 7 — In-app updates
+
+- [x] Add a user-triggered update check, download, installation, and restart flow.
+- [~] Configure signed updater artifacts and GitHub Releases metadata — workflow is ready; repository keys and the first published release remain.
+- [x] Document updater key handling, versioning, publishing, and rollback expectations.
+- [ ] Validate an upgrade between two packaged macOS versions.
+
 ## Decision log
 
 - 2026-08-13: Limit MVP to structured executable + arguments; arbitrary shell syntax is out of scope.
@@ -107,3 +114,4 @@ Last updated: 2026-08-18
 - 2026-08-18: Added Tauri mock-runtime integration coverage for trusted search, unknown-command rejection, context selection/retry, structured presentation, navigation persistence, and confirmed `mkdir`; native desktop integrations remain manual release checks.
 - 2026-08-18: Replaced the placeholder icon with a generated-concept, vector-authored Quick Command mark, regenerated platform assets, configured explicit bundle icons, and enabled separate production/development CSP policies.
 - 2026-08-18: Changed the release identifier to `com.quickcommand.launcher` and added a non-destructive first-launch import from the earlier `com.quickcommand.app` data directory.
+- 2026-08-18: Added a manual update workflow with version display, explicit checks, release notes, download progress, signed installation, automatic relaunch, and a draft GitHub Release pipeline; repository updater credentials and a two-version packaged validation remain manual follow-up work.

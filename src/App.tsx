@@ -8,6 +8,7 @@ import { ContextUpdateView } from "./components/ContextUpdateView";
 import { OperationCompletedView, OperationConfirmationView } from "./components/OperationView";
 import { WorkspaceList } from "./components/WorkspaceList";
 import { WorkspacePicker } from "./components/WorkspacePicker";
+import { UpdateSection } from "./components/UpdateSection";
 
 const emptyQuery: QueryResponse = {
   executable: null,
@@ -521,6 +522,7 @@ function SettingsDialog({ state, onClose, onChange }: { state: LauncherState; on
           </button>
         </label>
         <WorkspaceList workspaces={workspaces} disabled={busy} onChange={setWorkspaces} onError={(message) => setError(message || null)} />
+        <UpdateSection />
         {error && <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</div>}
         <div className="mt-5 flex items-center justify-between">
           <span className="text-xs text-zinc-600">保存后自动重建索引</span>

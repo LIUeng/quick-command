@@ -49,6 +49,12 @@ export type LauncherState = {
   startupNotice: string | null;
 };
 
+export type UpdateConfiguration = {
+  currentVersion: string;
+  configured: boolean;
+  releasesUrl: string;
+};
+
 export type QueryResponse = {
   executable: string | null;
   directoryQuery: string | null;

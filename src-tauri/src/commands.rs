@@ -41,6 +41,17 @@ pub fn get_launcher_state(store: State<'_, Store>) -> Result<LauncherState, Stri
     Ok(snapshot(&data))
 }
 
+#[tauri::command]
+pub fn get_update_configuration() -> UpdateConfiguration {
+    let configured =
+        option_env!("QUICK_COMMAND_UPDATER_PUBKEY").is_some_and(|value| !value.trim().is_empty());
+    UpdateConfiguration {
+        current_version: env!("CARGO_PKG_VERSION"),
+        configured,
+        releases_url: "https://github.com/LIUeng/quick-command/releases",
+    }
+}
+
 fn remove_history_item(data: &mut AppData, history_id: &str) -> bool {
     let previous_len = data.history.len();
     data.history.retain(|item| item.id != history_id);

@@ -42,5 +42,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/LIUeng/quick-command/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
   }
 }

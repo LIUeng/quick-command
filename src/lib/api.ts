@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CommandActionKind, CommandExecution, LauncherState, OperationKind, QueryResponse, Settings } from "./types";
+import type { CommandActionKind, CommandExecution, LauncherState, OperationKind, QueryResponse, Settings, UpdateConfiguration } from "./types";
 
 const inTauri = () => "__TAURI_INTERNALS__" in window;
 
@@ -13,6 +13,13 @@ const demoState: LauncherState = {
 
 export async function loadState(): Promise<LauncherState> {
   return inTauri() ? invoke("get_launcher_state") : demoState;
+}
+
+export async function loadUpdateConfiguration(): Promise<UpdateConfiguration> {
+  if (!inTauri()) {
+    return { currentVersion: "0.1.0", configured: false, releasesUrl: "https://github.com/LIUeng/quick-command/releases" };
+  }
+  return invoke("get_update_configuration");
 }
 
 export async function deleteHistoryItem(historyId: string): Promise<LauncherState> {

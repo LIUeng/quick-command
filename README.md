@@ -8,6 +8,8 @@ description: 这是一个快速执行用户输入命令的桌面客户端应用
 
 > 当前状态：MVP 开发中。详细任务进度见 [`docs/PROGRESS.md`](docs/PROGRESS.md)。
 
+支持从签名后的 GitHub Release 手动检查、下载并安装应用更新。发布密钥、版本和验证流程见 [`docs/RELEASE.md`](docs/RELEASE.md)。
+
 ## 背景
 
 > 目前执行命令的过程

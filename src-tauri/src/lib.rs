@@ -41,6 +41,12 @@ pub fn run() {
     let app = tauri::Builder::default()
         .manage(WindowBehavior::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .pubkey(option_env!("QUICK_COMMAND_UPDATER_PUBKEY").unwrap_or_default())
+                .build(),
+        )
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -91,6 +97,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_launcher_state,
+            commands::get_update_configuration,
             commands::delete_history_item,
             commands::search_projects,
             commands::execute_command,

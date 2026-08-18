@@ -106,6 +106,14 @@ pub struct LauncherState {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateConfiguration {
+    pub current_version: &'static str,
+    pub configured: bool,
+    pub releases_url: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub path: String,
     pub name: String,
