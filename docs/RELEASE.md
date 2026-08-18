@@ -64,17 +64,25 @@ Never replace the updater key pair after releasing an updater-enabled version un
 
 ## Publishing an update
 
-Keep the version identical in these files:
+Set the next stable semantic version with one command:
+
+```bash
+pnpm version:set 0.3.0
+```
+
+The command synchronizes these files:
 
 - `package.json`
 - `src-tauri/Cargo.toml`
 - `src-tauri/tauri.conf.json`
 
-Validate synchronization with:
+It also updates Quick Command's own package entry in `src-tauri/Cargo.lock`. Validate synchronization with:
 
 ```bash
 pnpm version:check
 ```
+
+`version:set` accepts stable `major.minor.patch` versions. Create the Git tag only after committing the generated version changes.
 
 Then run the normal checks, commit the version and release notes, and push a matching semantic-version tag:
 

@@ -78,6 +78,7 @@ Last updated: 2026-08-18
 - [~] Configure signed updater artifacts and GitHub Releases metadata — workflow is ready; repository keys and the first published release remain.
 - [x] Document updater key handling, versioning, publishing, and rollback expectations.
 - [x] Verify and correct the tag-to-project version check in GitHub Actions.
+- [x] Add one-command synchronization for all release version files.
 - [ ] Validate an upgrade between two packaged macOS versions.
 
 ## Decision log
@@ -117,3 +118,4 @@ Last updated: 2026-08-18
 - 2026-08-18: Changed the release identifier to `com.quickcommand.launcher` and added a non-destructive first-launch import from the earlier `com.quickcommand.app` data directory.
 - 2026-08-18: Added a manual update workflow with version display, explicit checks, release notes, download progress, signed installation, automatic relaunch, and a draft GitHub Release pipeline; repository updater credentials and a two-version packaged validation remain manual follow-up work.
 - 2026-08-18: Corrected the release version checker to ignore pnpm's forwarded `--` argument so semantic-version tags are compared with the project version instead of the argument separator.
+- 2026-08-18: Added `pnpm version:set <major.minor.patch>` to validate and synchronize the frontend, Cargo, Tauri, and lockfile release versions before tagging.
