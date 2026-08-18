@@ -38,6 +38,24 @@ impl Store {
     }
 }
 
+pub fn import_legacy_state_if_missing(current: &Path, legacy: &Path) -> Result<bool, String> {
+    if current.exists() || !legacy.is_file() {
+        return Ok(false);
+    }
+    if let Some(parent) = current.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| user_error(error, "无法创建新版应用数据目录"))?;
+    }
+    fs::copy(legacy, current).map_err(|error| user_error(error, "无法迁移旧版应用数据"))?;
+
+    let legacy_backup = backup_path(legacy);
+    if legacy_backup.is_file() {
+        fs::copy(legacy_backup, backup_path(current))
+            .map_err(|error| user_error(error, "无法迁移旧版应用数据备份"))?;
+    }
+    Ok(true)
+}
+
 fn load_with_recovery(path: &Path) -> Result<(AppData, Option<String>), String> {
     if !path.exists() {
         return restore_without_primary(path);
@@ -354,6 +372,29 @@ mod tests {
         let (primary, _) = read_state(&path).unwrap();
         assert_eq!(backup.settings.shortcut, "Control+1");
         assert_eq!(primary.settings.shortcut, "Control+2");
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn imports_legacy_state_without_deleting_the_source() {
+        let root = test_root("legacy-import");
+        let legacy_dir = root.join("com.quickcommand.app");
+        let current_dir = root.join("com.quickcommand.launcher");
+        fs::create_dir_all(&legacy_dir).unwrap();
+        let legacy = legacy_dir.join("state.json");
+        let current = current_dir.join("state.json");
+        let mut data = AppData::default();
+        data.settings.shortcut = "Control+3".into();
+        write_json(&legacy, &data);
+        write_json(&backup_path(&legacy), &data);
+
+        assert!(import_legacy_state_if_missing(&current, &legacy).unwrap());
+        assert!(legacy.is_file());
+        assert!(backup_path(&legacy).is_file());
+        assert!(current.is_file());
+        assert!(backup_path(&current).is_file());
+        assert!(!import_legacy_state_if_missing(&current, &legacy).unwrap());
 
         fs::remove_dir_all(root).unwrap();
     }

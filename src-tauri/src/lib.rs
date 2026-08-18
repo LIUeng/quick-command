@@ -51,8 +51,24 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            let data_path = app.path().app_data_dir()?.join("state.json");
+            let data_dir = app.path().app_data_dir()?;
+            let data_path = data_dir.join("state.json");
+            let imported_legacy_state = data_dir
+                .parent()
+                .map(|parent| parent.join("com.quickcommand.app").join("state.json"))
+                .map(|legacy_path| store::import_legacy_state_if_missing(&data_path, &legacy_path))
+                .transpose()
+                .map_err(std::io::Error::other)?
+                .unwrap_or(false);
             let store = Store::load(data_path).map_err(std::io::Error::other)?;
+            if imported_legacy_state {
+                store
+                    .data
+                    .lock()
+                    .map_err(|_| std::io::Error::other("state lock failed"))?
+                    .startup_notice =
+                    Some("已从旧版应用数据目录迁移设置、历史记录和项目索引；旧数据仍保留。".into());
+            }
             let shortcut = store
                 .data
                 .lock()

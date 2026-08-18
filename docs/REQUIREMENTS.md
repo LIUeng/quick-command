@@ -97,6 +97,7 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 - The UI must be operable without a mouse.
 - User-facing failures must include a concrete recovery hint.
 - Critical command workflows must be exercised through the Tauri IPC boundary with isolated filesystem and persistence fixtures.
+- Production bundles must include platform-appropriate application icons and a restrictive CSP that permits only required Tauri IPC, local assets, and development-server connections.
 
 ## Explicitly out of scope for MVP
 

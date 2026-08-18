@@ -89,3 +89,4 @@ Quick Command 只执行内置可信命令目录中的命令，当前包括 `code
 - 完整需求：[`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)
 - 技术架构：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - 任务进度：[`docs/PROGRESS.md`](docs/PROGRESS.md)
+- 打包与排查：[`docs/RELEASE.md`](docs/RELEASE.md)

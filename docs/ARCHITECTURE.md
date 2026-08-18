@@ -177,3 +177,13 @@ An explicit `./` argument retains command-line path semantics and does not enter
 - Covered flows include trusted project search, unknown-command rejection, missing-context selection and retry, structured directory presentation, `cd` persistence, and two-phase `mkdir` confirmation.
 - Tests reload the persisted `Store` after command execution where state durability is part of the behavior.
 - Real editor launch, global shortcut registration, native folder dialogs, and packaged-app environment behavior remain manual macOS validation targets because automated tests must not open applications or mutate global desktop state.
+
+## Bundle and content-security contract
+
+- The editable icon source is `src-tauri/icons/icon.svg`; generated PNG, ICNS, ICO, iOS, and Android assets are produced through `pnpm tauri icon`.
+- The icon uses a dark rounded surface with a high-contrast command prompt and speed accent so it remains identifiable in the Dock and at 16–32 px.
+- Production CSP defaults to local application content and allows only Tauri IPC plus local/data image and font sources required by the interface.
+- Development CSP additionally permits the Vite server and its local WebSocket connection; those origins are absent from production CSP.
+- Native capabilities remain explicitly listed in `src-tauri/capabilities/default.json`; CSP does not replace Tauri capability checks.
+- Signing, notarization, Gatekeeper validation, Dock launch, native dialogs, and global-shortcut behavior must be verified against a real packaged macOS build.
+- The production identifier is `com.quickcommand.launcher`. On first launch with an empty new data directory, the application copies compatible state and backup files from the earlier `com.quickcommand.app` directory without deleting the legacy source.

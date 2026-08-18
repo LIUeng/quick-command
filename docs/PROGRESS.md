@@ -41,8 +41,8 @@ Last updated: 2026-08-18
 
 - [x] Add integration coverage for main command flows through the Tauri mock IPC boundary.
 - [~] Validate macOS GUI `PATH` behavior — deterministic fallback resolution is implemented; packaged-app manual validation remains.
-- [ ] Validate packaged app permissions and signing configuration.
-- [ ] Document local development, packaging, and troubleshooting.
+- [~] Validate packaged app permissions and signing configuration — application icon, bundle icon mapping, and CSP hardening are in progress.
+- [x] Document local development, packaging, and troubleshooting.
 
 ## Milestone 5 — Context-aware command system
 
@@ -66,7 +66,10 @@ Last updated: 2026-08-18
 - [x] Resolve launcher executables without relying on the macOS GUI process `PATH` alone.
 - [x] Add state corruption recovery and versioned migrations.
 - [x] Add integration coverage for critical launcher flows.
-- [ ] Complete production bundle, signing, notarization, and CSP validation.
+- [~] Complete production bundle, signing, notarization, and CSP validation.
+- [x] Add production application icons and explicit bundle icon mappings.
+- [x] Add separate restrictive production and Vite development CSP policies.
+- [ ] Validate signing, notarization, Gatekeeper, and packaged native integrations with release credentials.
 - [ ] Document packaged-app installation and troubleshooting.
 
 ## Decision log
@@ -102,3 +105,5 @@ Last updated: 2026-08-18
 - 2026-08-17: Closed raw-command fallthrough and added shell-free macOS executable resolution across inherited PATH, common binary directories, and supported application bundles; packaged-app PATH validation remains pending.
 - 2026-08-18: Added data version 2 migration, previous-state backups, timestamped corrupt-file preservation, automatic backup recovery, future-version protection, and a dismissible startup recovery notice.
 - 2026-08-18: Added Tauri mock-runtime integration coverage for trusted search, unknown-command rejection, context selection/retry, structured presentation, navigation persistence, and confirmed `mkdir`; native desktop integrations remain manual release checks.
+- 2026-08-18: Replaced the placeholder icon with a generated-concept, vector-authored Quick Command mark, regenerated platform assets, configured explicit bundle icons, and enabled separate production/development CSP policies.
+- 2026-08-18: Changed the release identifier to `com.quickcommand.launcher` and added a non-destructive first-launch import from the earlier `com.quickcommand.app` data directory.
