@@ -65,6 +65,16 @@ pnpm install
 pnpm tauri dev
 ```
 
+提交前的主要自动检查：
+
+```bash
+pnpm check
+pnpm build
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+Rust 测试包含通过 Tauri mock IPC 边界执行的关键命令流程，不会打开真实编辑器或修改用户应用数据。
+
 ### 支持的命令
 
 Quick Command 只执行内置可信命令目录中的命令，当前包括 `code`、`cursor`、`idea`、`webstorm`、`zed`、`open`、`ls`、`ll`、`cat`、`cd` 和 `mkdir`。未知命令不会作为系统进程直接启动。

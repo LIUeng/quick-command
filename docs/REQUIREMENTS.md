@@ -96,6 +96,7 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 - Ranking must be deterministic and unit tested.
 - The UI must be operable without a mouse.
 - User-facing failures must include a concrete recovery hint.
+- Critical command workflows must be exercised through the Tauri IPC boundary with isolated filesystem and persistence fixtures.
 
 ## Explicitly out of scope for MVP
 
@@ -126,3 +127,4 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 17. An unknown command is rejected before process creation, even when an executable with that name exists on the machine.
 18. A packaged macOS launch can find supported editor CLIs in common installation and application-bundle locations without loading the user's shell profile.
 19. Corrupt application data is preserved and recovered from the latest valid backup without preventing startup; a newer unsupported data version is never overwritten.
+20. Automated integration tests cover trusted search, unknown-command rejection, context selection and retry, structured presentation, navigation persistence, and confirmed directory creation without launching real desktop applications.

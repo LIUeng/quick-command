@@ -9,6 +9,9 @@ mod search;
 mod store;
 mod window_behavior;
 
+#[cfg(test)]
+mod integration_tests;
+
 use store::Store;
 use tauri::{Manager, Runtime};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};

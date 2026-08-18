@@ -169,3 +169,11 @@ An explicit `./` argument retains command-line path semantics and does not enter
 - Skip hidden directories and common heavy directories such as `node_modules`, `target`, and `.git`.
 - Use a bounded recursion depth.
 - Return useful errors without discarding the last valid index.
+
+## Integration testing contract
+
+- Cross-module command tests use Tauri's mock runtime and invoke the same generated IPC handlers used by the React client.
+- Each test owns a unique temporary workspace and state file; tests never read or modify the user's application-data directory.
+- Covered flows include trusted project search, unknown-command rejection, missing-context selection and retry, structured directory presentation, `cd` persistence, and two-phase `mkdir` confirmation.
+- Tests reload the persisted `Store` after command execution where state durability is part of the behavior.
+- Real editor launch, global shortcut registration, native folder dialogs, and packaged-app environment behavior remain manual macOS validation targets because automated tests must not open applications or mutate global desktop state.

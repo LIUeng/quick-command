@@ -39,7 +39,7 @@ Last updated: 2026-08-18
 
 ## Milestone 4 — Release readiness
 
-- [ ] Add integration coverage for main command flows.
+- [x] Add integration coverage for main command flows through the Tauri mock IPC boundary.
 - [~] Validate macOS GUI `PATH` behavior — deterministic fallback resolution is implemented; packaged-app manual validation remains.
 - [ ] Validate packaged app permissions and signing configuration.
 - [ ] Document local development, packaging, and troubleshooting.
@@ -65,7 +65,7 @@ Last updated: 2026-08-18
 - [x] Reject commands that are not in the trusted command catalog.
 - [x] Resolve launcher executables without relying on the macOS GUI process `PATH` alone.
 - [x] Add state corruption recovery and versioned migrations.
-- [ ] Add integration coverage for critical launcher flows.
+- [x] Add integration coverage for critical launcher flows.
 - [ ] Complete production bundle, signing, notarization, and CSP validation.
 - [ ] Document packaged-app installation and troubleshooting.
 
@@ -101,3 +101,4 @@ Last updated: 2026-08-18
 - 2026-08-17: Added confirmed `code x-pro/test01` project creation with safe relative-path validation, multi-directory preview, symlink-boundary checks, structured VS Code launch, and empty-directory rollback on launch failure.
 - 2026-08-17: Closed raw-command fallthrough and added shell-free macOS executable resolution across inherited PATH, common binary directories, and supported application bundles; packaged-app PATH validation remains pending.
 - 2026-08-18: Added data version 2 migration, previous-state backups, timestamped corrupt-file preservation, automatic backup recovery, future-version protection, and a dismissible startup recovery notice.
+- 2026-08-18: Added Tauri mock-runtime integration coverage for trusted search, unknown-command rejection, context selection/retry, structured presentation, navigation persistence, and confirmed `mkdir`; native desktop integrations remain manual release checks.
