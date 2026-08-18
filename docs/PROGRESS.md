@@ -43,6 +43,7 @@ Last updated: 2026-08-18
 - [~] Validate macOS GUI `PATH` behavior — deterministic fallback resolution is implemented; packaged-app manual validation remains.
 - [~] Validate packaged app permissions and signing configuration — application icon, bundle icon mapping, and CSP hardening are in progress.
 - [x] Document local development, packaging, and troubleshooting.
+- [x] Reorganize the project overview into matching Chinese and English READMEs.
 
 ## Milestone 5 — Context-aware command system
 
@@ -123,3 +124,4 @@ Last updated: 2026-08-18
 - 2026-08-18: Added `pnpm version:set <major.minor.patch>` to validate and synchronize the frontend, Cargo, Tauri, and lockfile release versions before tagging.
 - 2026-08-18: Fixed updater artifact builds by validating the generated `.pub` Base64 and writing it into an ignored Tauri release configuration before the GitHub Actions build.
 - 2026-08-18: Added a Homebrew Cask renderer, Release-published synchronization workflow, personal tap documentation, and Cask audit automation while retaining Tauri Updater as the application update channel.
+- 2026-08-18: Reorganized the project overview into parallel Chinese and English READMEs centered on product purpose, primary features, installation, safety boundaries, and concise usage, with reserved screenshot and demo-video positions.
