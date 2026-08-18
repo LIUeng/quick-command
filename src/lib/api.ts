@@ -8,6 +8,7 @@ const demoState: LauncherState = {
   activeContext: null,
   history: [],
   indexedDirectoryCount: 0,
+  startupNotice: null,
 };
 
 export async function loadState(): Promise<LauncherState> {

@@ -50,6 +50,16 @@ The MVP state contains:
 
 History is pruned to a reasonable internal cap while the UI returns the latest 30 entries.
 
+## Persistence recovery contract
+
+- `AppData.version` is compared with the current schema version before state enters memory.
+- Supported older versions are migrated sequentially and rewritten atomically in the current format.
+- A normal save copies the current valid primary file to `state.backup.json`, writes the next JSON state to a temporary file, and renames the temporary file over the primary.
+- A malformed primary file is copied to a timestamped `state.corrupt-*.json` file before recovery begins.
+- Recovery prefers the last valid backup. If no valid backup exists, the application creates a new default state while retaining the malformed source for manual inspection.
+- Recovery results are transient runtime notices and are not persisted back into application data.
+- State with a version newer than the running application is rejected without rewriting the primary or backup.
+
 ## History deletion contract
 
 - Each visible successful-history entry has a stable identifier and can be deleted independently.

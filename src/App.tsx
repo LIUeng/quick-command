@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
-import { Clock3, Command, FilePlus2, Folder, FolderPlus, Keyboard, LoaderCircle, Search, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, Clock3, Command, FilePlus2, Folder, FolderPlus, Keyboard, LoaderCircle, Search, Settings2, Trash2, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirmOperation, deleteHistoryItem, execute, executeAction, loadState, saveSettings, search, setActiveContext } from "./lib/api";
 import type { CommandAction, CommandExecution, HistoryActionKind, LauncherState, OperationConfirmation, PresentationEntry, PresentationOutput, QueryResponse, SearchResult, Settings, Workspace } from "./lib/types";
@@ -122,9 +122,13 @@ function App() {
   const [confirmation, setConfirmation] = useState<OperationConfirmation | null>(null);
   const [operationResult, setOperationResult] = useState<{ title: string; message: string; path: string } | null>(null);
   const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null);
+  const [startupNotice, setStartupNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    loadState().then(setState).catch((reason) => setError(describeError(reason)));
+    loadState().then((next) => {
+      setState(next);
+      setStartupNotice(next.startupNotice);
+    }).catch((reason) => setError(describeError(reason)));
     inputRef.current?.focus();
   }, []);
 
@@ -324,7 +328,13 @@ function App() {
   }
 
   if (!state) {
-    return <main className="grid min-h-screen place-items-center text-zinc-400"><LoaderCircle className="animate-spin" /></main>;
+    return (
+      <main className="grid min-h-screen place-items-center bg-transparent p-6 text-zinc-400">
+        {error
+          ? <div className="max-w-md rounded-2xl border border-red-400/20 bg-zinc-900 px-5 py-4 text-sm leading-6 text-red-200">{error}</div>
+          : <LoaderCircle className="animate-spin" />}
+      </main>
+    );
   }
 
   return (
@@ -350,6 +360,13 @@ function App() {
 
         <div className={`min-h-0 flex-1 p-2 ${showingOutcome ? "overflow-hidden" : "overflow-y-auto"}`}>
           {error && <div className="m-2 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</div>}
+          {startupNotice && (
+            <div className="m-2 flex items-start gap-3 rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+              <span className="min-w-0 flex-1 leading-5">{startupNotice}</span>
+              <button className="icon-button -mr-2 -mt-1" onClick={() => setStartupNotice(null)} aria-label="关闭数据恢复提示"><X className="h-4 w-4" /></button>
+            </div>
+          )}
 
           {query.trim() !== "" && !choosingWorkspace && !showingOutcome && choices.map((item, index) => (
             <button key={item.path} className={`result-row ${selected === index ? "result-row-active" : ""}`} onClick={() => void run(item)}>

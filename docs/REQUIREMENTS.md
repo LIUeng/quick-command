@@ -84,6 +84,10 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 - Allow editing the shortcut and managing workspace roots through a native folder picker.
 - Allow adding and removing workspace roots without deleting local files.
 - Allow deleting individual visible history entries without resetting project usage weight.
+- Version persisted application data and migrate supported older versions before use.
+- Keep the previous valid state as a recovery backup whenever a new state is saved.
+- Preserve malformed state files for manual recovery, restore the latest valid backup when possible, and show a startup notice describing the recovery result.
+- Refuse to overwrite state created by a newer unsupported application-data version.
 
 ## Non-functional requirements
 
@@ -121,3 +125,4 @@ Quick Command reduces the steps required to inspect, navigate, open, and operate
 16. `code x-pro/test01` previews and creates all missing directories inside the selected workspace, then opens the final project directory.
 17. An unknown command is rejected before process creation, even when an executable with that name exists on the machine.
 18. A packaged macOS launch can find supported editor CLIs in common installation and application-bundle locations without loading the user's shell profile.
+19. Corrupt application data is preserved and recovered from the latest valid backup without preventing startup; a newer unsupported data version is never overwritten.

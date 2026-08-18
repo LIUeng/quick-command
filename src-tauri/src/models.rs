@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const CURRENT_DATA_VERSION: u32 = 2;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Workspace {
@@ -75,16 +77,19 @@ pub struct AppData {
     pub active_context: Option<String>,
     pub directories: Vec<DirectoryRecord>,
     pub history: Vec<HistoryItem>,
+    #[serde(skip)]
+    pub startup_notice: Option<String>,
 }
 
 impl Default for AppData {
     fn default() -> Self {
         Self {
-            version: 1,
+            version: CURRENT_DATA_VERSION,
             settings: Settings::default(),
             active_context: None,
             directories: vec![],
             history: vec![],
+            startup_notice: None,
         }
     }
 }
@@ -96,6 +101,7 @@ pub struct LauncherState {
     pub active_context: Option<String>,
     pub history: Vec<HistoryItem>,
     pub indexed_directory_count: usize,
+    pub startup_notice: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -234,6 +240,16 @@ mod tests {
         }"#;
         let item: HistoryItem = serde_json::from_str(json).unwrap();
         assert_eq!(item.action, None);
+    }
+
+    #[test]
+    fn transient_startup_notice_is_not_persisted() {
+        let data = AppData {
+            startup_notice: Some("recovered".into()),
+            ..AppData::default()
+        };
+        let value = serde_json::to_value(data).unwrap();
+        assert!(value.get("startupNotice").is_none());
     }
 }
 

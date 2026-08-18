@@ -46,6 +46,7 @@ export type LauncherState = {
   activeContext: string | null;
   history: HistoryItem[];
   indexedDirectoryCount: number;
+  startupNotice: string | null;
 };
 
 export type QueryResponse = {

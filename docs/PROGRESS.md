@@ -1,6 +1,6 @@
 # Development Progress
 
-Last updated: 2026-08-17
+Last updated: 2026-08-18
 
 ## Milestone 0 — Definition
 
@@ -64,7 +64,7 @@ Last updated: 2026-08-17
 
 - [x] Reject commands that are not in the trusted command catalog.
 - [x] Resolve launcher executables without relying on the macOS GUI process `PATH` alone.
-- [ ] Add state corruption recovery and versioned migrations.
+- [x] Add state corruption recovery and versioned migrations.
 - [ ] Add integration coverage for critical launcher flows.
 - [ ] Complete production bundle, signing, notarization, and CSP validation.
 - [ ] Document packaged-app installation and troubleshooting.
@@ -100,3 +100,4 @@ Last updated: 2026-08-17
 - 2026-08-17: Added backward-compatible typed history action metadata across launcher, presentation, navigation, and filesystem operation flows, with concise labels for new and legacy records.
 - 2026-08-17: Added confirmed `code x-pro/test01` project creation with safe relative-path validation, multi-directory preview, symlink-boundary checks, structured VS Code launch, and empty-directory rollback on launch failure.
 - 2026-08-17: Closed raw-command fallthrough and added shell-free macOS executable resolution across inherited PATH, common binary directories, and supported application bundles; packaged-app PATH validation remains pending.
+- 2026-08-18: Added data version 2 migration, previous-state backups, timestamped corrupt-file preservation, automatic backup recovery, future-version protection, and a dismissible startup recovery notice.

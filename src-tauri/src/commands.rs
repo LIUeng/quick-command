@@ -31,6 +31,7 @@ fn snapshot(data: &AppData) -> LauncherState {
         active_context: data.active_context.clone(),
         history: data.history.iter().take(30).cloned().collect(),
         indexed_directory_count: data.directories.len(),
+        startup_notice: data.startup_notice.clone(),
     }
 }
 
