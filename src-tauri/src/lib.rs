@@ -38,15 +38,17 @@ fn show_window<R: Runtime>(app: &tauri::AppHandle<R>) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let updater_builder = match option_env!("QUICK_COMMAND_UPDATER_PUBKEY")
+        .filter(|value| !value.trim().is_empty())
+    {
+        Some(pubkey) => tauri_plugin_updater::Builder::new().pubkey(pubkey),
+        None => tauri_plugin_updater::Builder::new(),
+    };
     let app = tauri::Builder::default()
         .manage(WindowBehavior::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(
-            tauri_plugin_updater::Builder::new()
-                .pubkey(option_env!("QUICK_COMMAND_UPDATER_PUBKEY").unwrap_or_default())
-                .build(),
-        )
+        .plugin(updater_builder.build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {

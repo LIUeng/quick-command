@@ -38,6 +38,11 @@ jobs:
           test -n "$UPDATER_PRIVATE_KEY" || { echo "Missing TAURI_SIGNING_PRIVATE_KEY secret"; exit 1; }
           test -n "$UPDATER_PUBLIC_KEY" || { echo "Missing TAURI_SIGNING_PUBLIC_KEY variable"; exit 1; }
 
+      - name: Prepare updater release configuration
+        env:
+          QUICK_COMMAND_UPDATER_PUBKEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY }}
+        run: pnpm release:config
+
       - name: Build signed updater artifacts
         uses: tauri-apps/tauri-action@v0
         env:
@@ -52,4 +57,4 @@ jobs:
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
-          args: --target universal-apple-darwin --config src-tauri/tauri.release.conf.json
+          args: --target universal-apple-darwin --config src-tauri/tauri.release.generated.conf.json

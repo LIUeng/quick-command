@@ -11,6 +11,7 @@ vite.config.d.ts
 # Rust and generated Tauri schemas
 src-tauri/target/
 src-tauri/gen/
+src-tauri/tauri.release.generated.conf.json
 
 # Local environment and logs
 .env

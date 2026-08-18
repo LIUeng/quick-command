@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "check": "tsc -b",
+    "release:config": "node scripts/create-release-config.mjs",
     "version:set": "node scripts/set-version.mjs",
     "version:check": "node scripts/check-version.mjs",
     "tauri": "tauri"

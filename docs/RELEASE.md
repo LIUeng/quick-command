@@ -54,11 +54,11 @@ Configure the GitHub repository under **Settings → Secrets and variables → A
 
 - Secret `TAURI_SIGNING_PRIVATE_KEY`: complete contents of the generated private-key file.
 - Secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: password chosen during key generation.
-- Variable `TAURI_SIGNING_PUBLIC_KEY`: complete contents of the generated public-key file.
+- Variable `TAURI_SIGNING_PUBLIC_KEY`: unchanged single-line Base64 contents of the generated `.pub` file.
 
-The public key is not secret, but the release workflow injects it at compile time through `QUICK_COMMAND_UPDATER_PUBKEY`. Local builds without this value show the current version and explain that application updates are disabled.
+Do not decode the `.pub` file or manually add a minisign comment. The release workflow validates that the single-line value decodes to the expected minisign structure, generates `src-tauri/tauri.release.generated.conf.json`, and injects the same value at compile time through `QUICK_COMMAND_UPDATER_PUBKEY`. The generated configuration is ignored by Git. Local builds without this value show the current version and explain that application updates are disabled.
 
-Updater artifact generation is enabled only by `src-tauri/tauri.release.conf.json`. The normal local `pnpm tauri build` command therefore does not require updater signing credentials.
+Updater artifact generation is enabled by the `src-tauri/tauri.release.conf.json` template and copied into the generated configuration. The normal local `pnpm tauri build` command therefore does not require updater signing credentials.
 
 Never replace the updater key pair after releasing an updater-enabled version unless a deliberate key-rotation migration has first shipped with the required trust material.
 
