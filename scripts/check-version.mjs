@@ -4,7 +4,7 @@ const packageVersion = JSON.parse(readFileSync(new URL("../package.json", import
 const tauriVersion = JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8")).version;
 const cargoContents = readFileSync(new URL("../src-tauri/Cargo.toml", import.meta.url), "utf8");
 const cargoVersion = cargoContents.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
-const expectedVersion = process.argv[2];
+const expectedVersion = process.argv.slice(2).find((argument) => argument !== "--");
 
 const versions = { packageVersion, tauriVersion, cargoVersion };
 const values = Object.values(versions);
