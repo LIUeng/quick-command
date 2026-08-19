@@ -4,7 +4,9 @@ A local project launcher for macOS. Open it with a global shortcut, then use sho
 
 [简体中文](README.md) · [Architecture](docs/ARCHITECTURE.md) · [Release guide](docs/RELEASE.md)
 
-<!-- Add the primary Quick Command screenshot here. -->
+<p align="center">
+  <img src="captures/v0.2.0.page01.jpg" alt="Quick Command launcher" width="760" />
+</p>
 
 ## Why Quick Command
 
@@ -23,7 +25,13 @@ Quick Command puts this workflow into a lightweight, Spotlight-style window: pre
 - **History and preferences**: keep successful actions, promote frequently used projects, remove individual history items, and customize the shortcut.
 - **Manual updates**: check for updates in Settings, review release notes, and install artifacts verified with a Tauri updater signature.
 
-<!-- Add the Quick Command demo video or GIF here. -->
+<p align="center">
+  <img src="captures/v0.2.0.page02.jpg" alt="Quick Command settings" width="760" />
+</p>
+
+<p align="center">
+  <a href="captures/v0.2.0.display.mov">▶ Watch the Quick Command demo video</a>
+</p>
 
 ## Installation
 

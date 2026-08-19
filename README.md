@@ -4,7 +4,9 @@
 
 [English](README.en.md) · [开发文档](docs/ARCHITECTURE.md) · [发布说明](docs/RELEASE.md)
 
-<!-- 在这里添加 Quick Command 主界面截图。 -->
+<p align="center">
+  <img src="captures/v0.2.0.page01.jpg" alt="Quick Command 主界面" width="760" />
+</p>
 
 ## 为什么做 Quick Command
 
@@ -23,7 +25,13 @@ Quick Command 把这段流程收进一个 Spotlight 风格的轻量窗口：按�
 - **历史与偏好**：记录成功操作、提升常用项目排序，并支持单条历史删除和快捷键设置。
 - **手动更新**：在设置中检查更新，查看版本说明并安装经过 Tauri 签名验证的更新包。
 
-<!-- 在这里添加 Quick Command 功能演示视频或 GIF。 -->
+<p align="center">
+  <img src="captures/v0.2.0.page02.jpg" alt="Quick Command 设置界面" width="760" />
+</p>
+
+<p align="center">
+  <a href="captures/v0.2.0.display.mov">▶ 查看 Quick Command 功能演示视频</a>
+</p>
 
 ## 安装
 

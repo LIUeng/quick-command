@@ -1,6 +1,6 @@
 # Development Progress
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 ## Milestone 0 — Definition
 
@@ -44,6 +44,7 @@ Last updated: 2026-08-18
 - [~] Validate packaged app permissions and signing configuration — application icon, bundle icon mapping, and CSP hardening are in progress.
 - [x] Document local development, packaging, and troubleshooting.
 - [x] Reorganize the project overview into matching Chinese and English READMEs.
+- [x] Add versioned launcher screenshots and a demo video to both project READMEs.
 
 ## Milestone 5 — Context-aware command system
 
@@ -125,3 +126,4 @@ Last updated: 2026-08-18
 - 2026-08-18: Fixed updater artifact builds by validating the generated `.pub` Base64 and writing it into an ignored Tauri release configuration before the GitHub Actions build.
 - 2026-08-18: Added a Homebrew Cask renderer, Release-published synchronization workflow, personal tap documentation, and Cask audit automation while retaining Tauri Updater as the application update channel.
 - 2026-08-18: Reorganized the project overview into parallel Chinese and English READMEs centered on product purpose, primary features, installation, safety boundaries, and concise usage, with reserved screenshot and demo-video positions.
+- 2026-08-19: Added versioned launcher and settings screenshots plus a linked MOV demonstration to the matching Chinese and English README presentation sections.
